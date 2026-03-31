@@ -1,1 +1,53 @@
+package com.app.audit;
 
+import java.time.LocalDateTime;
+
+public class TransactionLog {
+
+    private final String id;
+    private final LocalDateTime time;
+    private final String client;
+    private final String info;
+
+    public TransactionLog(String id, LocalDateTime time, String client, String info) {
+        if (id == null || id.isBlank()) {
+            throw new IllegalArgumentException("id must not be null or blank");
+        }
+        if (time == null) {
+            throw new IllegalArgumentException("time must not be null");
+        }
+        if (client == null || client.isBlank()) {
+            throw new IllegalArgumentException("client must not be null or blank");
+        }
+        this.id = id;
+        this.time = time;
+        this.client = client;
+        this.info = (info != null) ? info : "";
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public LocalDateTime getTime() {
+        return time;
+    }
+
+    public String getClient() {
+        return client;
+    }
+
+    public String getInfo() {
+        return info;
+    }
+
+    @Override
+    public String toString() {
+        return "TransactionLog{" +
+                "id='" + id + '\'' +
+                ", time=" + time +
+                ", client='" + client + '\'' +
+                ", info='" + info + '\'' +
+                '}';
+    }
+}
