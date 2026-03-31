@@ -1,1 +1,43 @@
+package com.app.audit;
 
+import java.time.LocalDateTime;
+
+public class AuditRecord {
+
+    private final String recordId;
+    private final RecordType recordType;
+    private final LocalDateTime createdAt;
+
+    public AuditRecord(String recordId, RecordType recordType) {
+        if (recordId == null || recordId.isBlank()) {
+            throw new IllegalArgumentException("recordId must not be null or blank");
+        }
+        if (recordType == null) {
+            throw new IllegalArgumentException("recordType must not be null");
+        }
+        this.recordId = recordId;
+        this.recordType = recordType;
+        this.createdAt = LocalDateTime.now();
+    }
+
+    public String getRecordId() {
+        return recordId;
+    }
+
+    public RecordType getRecordType() {
+        return recordType;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
+
+    @Override
+    public String toString() {
+        return "AuditRecord{" +
+                "recordId='" + recordId + '\'' +
+                ", recordType=" + recordType +
+                ", createdAt=" + createdAt +
+                '}';
+    }
+}
