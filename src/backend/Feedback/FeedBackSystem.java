@@ -7,7 +7,7 @@ public class FeedBackSystem {
     private static final List<FeedBack> feedbacklist = new ArrayList<>();
 
     public static void main(String[] args){
-        System.out.printf("====FeedBack Collection System====");
+        System.out.print("====FeedBack Collection System====");
 
         while (true) {
             System.out.println("\n1. Submit Feedback");
@@ -41,43 +41,46 @@ public class FeedBackSystem {
             return;
         }
 
-        System.out.print("Enter your email");
+        System.out.print("Enter your email: ");
         String email = scanner.nextLine().trim();
-    if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")){
-        System.out.println("Invalid email format.");
-        return;
-    }
-
-    System.out.print("Enter your feeback message: ");
-    String message  = scanner.nextLine().trim();
-    if (message.isEmpty()){
-        System.out.println("Feedback message cannot be empty");
-        return;
-    }
-
-    System.out.print("ENter rating (1-5): ");
-    int rating;
-    try{
-        rating = Integer.parseInt(scanner.nextLine().trim());
-        if (rating < 1 || rating > 5){
-            System.out.println("Rating must be between 1 and 5.");
+        if (!email.matches("^[\\w.-]+@[\\w.-]+\\.[a-zA-Z]{2,}$")){
+            System.out.println("Invalid email format.");
             return;
         }
-    } catch (NumberFormatException e){
-        System.out.println("Invalid rating. Please enter a number between (1-5).");
-        return;
-    }
 
-    feedbacklist.add(new FeedBack(name, email, message, rating));
-    System.out.println("Thank you! Your feedback has been recorded.");
+        System.out.print("Enter your feedback message: ");
+        String message  = scanner.nextLine().trim();
+        if (message.isEmpty()){
+            System.out.println("Feedback message cannot be empty");
+            return;
+        }
+
+        System.out.print("Enter rating (1-5): ");
+        int rating;
+        try{
+            rating = Integer.parseInt(scanner.nextLine().trim());
+            if (rating < 1 || rating > 5){
+                System.out.println("Rating must be between 1 and 5.");
+                return;
+            }
+        } catch (NumberFormatException e){
+            System.out.println("Invalid rating. Please enter a number between (1-5).");
+            return;
+        }
+
+        feedbacklist.add(new FeedBack(name, email, message, rating));
+        System.out.println("Thank you! Your feedback has been recorded.");
 
     }
 
     private static void displayFeedback() {
         if (feedbacklist.isEmpty()) {
             System.out.println("No feedback available.");
+        } else {
+            System.out.println("\n=== All Feedback ===");
             for (FeedBack fb : feedbacklist) {
                 System.out.println(fb);
+                System.out.println("-----------------");
             }
         }
     }
