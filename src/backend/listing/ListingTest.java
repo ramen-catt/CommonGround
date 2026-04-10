@@ -1,20 +1,24 @@
 package com.commonground.listing;
 
 //Ran this in the terminal VS code 
-//   STEP 1: Run CommonGround_db.sql in MySQL Workbench
+//   1: Run CommonGround_db.sql in MySQL Workbench
 //           (Dennis/Miguel P's main database file 
 //
-//   STEP 2: Run listing_setup.sql in MySQL Workbench
+//   2: Run listing_setup.sql in MySQL Workbench
 //           (creates the test account, client, and location you need)
+//   3. Had to create a new user because it wasnt connecting to my local host ran this command in a new query
+//CREATE USER 'gguser'@'localhost' IDENTIFIED BY 'ggpass123';
+//GRANT ALL PRIVILEGES ON commonground_db.* TO 'gguser'@'localhost';
+//FLUSH PRIVILEGES;-- this is what you see in the DOA user name and pass
 //
-//   STEP 3: Update DB_PASS in ListingDAO.java to your MySQL password I changed it to mine dont hack me... you will steal all my SQL secrets
+//   4: Update DB_PASS in ListingDAO.java to your MySQL password I changed it to mine dont hack me... you will steal all my SQL secrets
 //
-//   STEP 4: Download the MySQL JDBC driver .jar file
+//   5: Download the MySQL JDBC driver .jar file
 //           Go to: https://dev.mysql.com/downloads/connector/j/
 //           Pick "Platform Independent" → download ZIP → extract it
 //           Put the .jar file in a folder called lib/ in your project
 //           This is what I have in the lib folder under docs 
-//   STEP 5: Ran this in the terminal 
+//   6: Ran this in the terminal 
 //        >> Remove-Item out -Recurse -Force
 //        >> New-Item -ItemType Directory -Name out
 //        >> javac -cp ".;lib/*" -d out src\backend\listing\*.java
