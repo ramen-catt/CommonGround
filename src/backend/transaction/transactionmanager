@@ -1,1 +1,319 @@
+package transactions;
+
+import database.AuditTrail;
+import database.TransactionDatabase;
+
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
+/**
+ * TransactionManager — Orchestrates the full transaction lifecycle on CommonGround.
+ *
+ * Responsibilities:
+ *  - Initiating transactions between buyer and seller
+ *  - Managing the multithreaded dual-confirmation process
+ *  - Routing both users to the rating/review screen after confirmation
+ *  - Cancelling transactions
+ *  - Querying transaction history and status
+ *
+ * This class corresponds to the transaction-related methods found in the Client class
+ * from the CommonGround class diagram:
+ *   Make_Purchase(listID)
+ *   Review_Trans(bxnID)
+ *   Delivered_Trans(bxnID)
+ *   Cancel_Trans(bxnID)
+ *
+ * And the database method:
+ *   Transactions(bxnID)
+ */
+public class TransactionManager {
+
+    // Active in-memory transaction store (in a full system this would be the DB)
+    private final Map<String, Transaction> activeTransactions = new HashMap<>();
+
+    // Thread pool for running buyer/seller confirmation concurrently
+    private final ExecutorService executorService = Executors.newCachedThreadPool();
+
+    // Callback interface — called when both parties confirm and are ready for rating
+    public interface TransactionConfirmationCallback {
+        void onBothConfirmed(String bxnID, String buyerID, String sellerID);
+    }
+
+    // ─── Make_Purchase ───────────────────────────────────────────────────────
+
+    /**
+     * Initiates a new transaction for a listing.
+     * Called by the buyer's Client when they click "Buy".
+     *
+     * Validates payment info and registers the transaction in the database.
+     *
+     * @param listID       The listing being purchased.
+     * @param buyerUserID  The ID of the buyer.
+     * @param sellerUserID The ID of the seller.
+     * @param paymentInfo  The agreed payment method and price.
+     * @return The newly created Transaction, or null if validation fails.
+     */
+    public Transaction Make_Purchase(String listID, String buyerUserID,
+                                     String sellerUserID, PaymentInfo paymentInfo) {
+
+        System.out.println("\n[TransactionManager] Initiating purchase for listing: " + listID);
+
+        Transaction transaction = new Transaction(listID, buyerUserID, sellerUserID, paymentInfo);
+
+        // Run authorization checks
+        if (!transaction.Authorization(paymentInfo)) {
+            System.out.println("[TransactionManager] Make_Purchase FAILED: payment authorization rejected.");
+            return null;
+        }
+
+        // Confirm payment type is recognized
+        if (!transaction.Confirm_Payment_Type(transaction.getBxnID())) {
+            System.out.println("[TransactionManager] Make_Purchase FAILED: payment type not confirmed.");
+            return null;
+        }
+
+        // Store the transaction
+        activeTransactions.put(transaction.getBxnID(), transaction);
+        TransactionDatabase.saveTransaction(transaction);
+
+        // Audit log
+        AuditTrail.CreateRecord(
+                "transaction",
+                transaction.getBxnID(),
+                "New transaction created: buyer=" + buyerUserID
+                        + ", seller=" + sellerUserID
+                        + ", listing=" + listID
+                        + ", payment=" + paymentInfo.getMethod()
+                        + ", price=$" + String.format("%.2f", paymentInfo.getAgreedPrice())
+        );
+
+        System.out.println("[TransactionManager] Transaction created: " + transaction.getBxnID());
+        return transaction;
+    }
+
+    // ─── Dual Confirmation (Multithreaded) ───────────────────────────────────
+
+    /**
+     * Initiates the multithreaded confirmation process where BOTH the buyer and
+     * seller must press 'Confirm' in real-time before proceeding to rating/review.
+     *
+     * Each user's confirmation is handled on a separate thread. Both threads block
+     * on a CountDownLatch until the other party confirms (or a timeout occurs).
+     * When both confirm, the callback is invoked to route both users to ratings.
+     *
+     * @param bxnID    The transaction ID.
+     * @param callback Called on the thread that was last to confirm,
+     *                 once both parties have confirmed.
+     */
+    public void initiateDualConfirmation(String bxnID, TransactionConfirmationCallback callback) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn == null) {
+            System.out.println("[TransactionManager] initiateDualConfirmation FAILED: transaction " + bxnID + " not found.");
+            return;
+        }
+
+        System.out.println("\n[TransactionManager] Starting dual-confirmation for " + bxnID
+                + ". Waiting for both buyer (" + txn.getBuyerUserID()
+                + ") and seller (" + txn.getSellerUserID() + ") to confirm...");
+
+        // Simulate buyer confirming on their own thread
+        Future<?> buyerFuture = executorService.submit(() -> {
+            boolean confirmed = txn.confirmTransaction(txn.getBuyerUserID());
+            if (confirmed && txn.Status(bxnID) == TransactionStatus.BOTH_CONFIRMED) {
+                txn.Release_Payment(bxnID);
+                if (callback != null) {
+                    callback.onBothConfirmed(bxnID, txn.getBuyerUserID(), txn.getSellerUserID());
+                }
+            }
+        });
+
+        // Simulate seller confirming on their own thread
+        Future<?> sellerFuture = executorService.submit(() -> {
+            boolean confirmed = txn.confirmTransaction(txn.getSellerUserID());
+            // The last-to-confirm thread also sees BOTH_CONFIRMED and triggers the callback
+            if (confirmed && callback != null) {
+                callback.onBothConfirmed(bxnID, txn.getBuyerUserID(), txn.getSellerUserID());
+            }
+        });
+    }
+
+    /**
+     * Called when a specific user presses 'Confirm' in the UI.
+     * Non-blocking — the confirmation waiting is handled on a background thread.
+     *
+     * @param bxnID  The transaction ID.
+     * @param userID The user who pressed confirm.
+     * @param callback Called once both parties have confirmed.
+     */
+    public void userPressedConfirm(String bxnID, String userID,
+                                   TransactionConfirmationCallback callback) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn == null) {
+            System.out.println("[TransactionManager] userPressedConfirm FAILED: transaction not found.");
+            return;
+        }
+
+        executorService.submit(() -> {
+            boolean confirmed = txn.confirmTransaction(userID);
+
+            if (confirmed) {
+                TransactionStatus status = txn.Status(bxnID);
+                if (status == TransactionStatus.BOTH_CONFIRMED) {
+                    txn.Release_Payment(bxnID);
+                    if (callback != null) {
+                        callback.onBothConfirmed(bxnID, txn.getBuyerUserID(), txn.getSellerUserID());
+                    }
+                }
+            }
+        });
+
+        System.out.println("[TransactionManager] User " + userID + " has pressed Confirm on transaction " + bxnID
+                + ". Waiting for the other party...");
+    }
+
+    // ─── Review_Trans ────────────────────────────────────────────────────────
+
+    /**
+     * Retrieves transaction details for review by the specified user.
+     * Corresponds to Review_Trans(bxnID) in the Client class.
+     *
+     * @param bxnID  The transaction ID.
+     * @param userID The user requesting the review.
+     * @return The Transaction object, or null if not found or user is not authorized.
+     */
+    public Transaction Review_Trans(String bxnID, String userID) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn == null) {
+            txn = TransactionDatabase.getTransaction(bxnID);
+        }
+
+        if (txn == null) {
+            System.out.println("[TransactionManager] Review_Trans FAILED: transaction " + bxnID + " not found.");
+            return null;
+        }
+
+        if (!txn.getBuyerUserID().equals(userID) && !txn.getSellerUserID().equals(userID)) {
+            System.out.println("[TransactionManager] Review_Trans REJECTED: user " + userID
+                    + " is not a party to transaction " + bxnID);
+            return null;
+        }
+
+        System.out.println("[TransactionManager] Transaction details for " + bxnID + ":");
+        System.out.println("  Status:        " + txn.Status(bxnID));
+        System.out.println("  Listing:       " + txn.getListingID());
+        System.out.println("  Buyer:         " + txn.getBuyerUserID());
+        System.out.println("  Seller:        " + txn.getSellerUserID());
+        System.out.println("  Payment:       " + txn.getPaymentInfo());
+        System.out.println("  Created:       " + txn.getCreatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        System.out.println("  Last Updated:  " + txn.getUpdatedAt().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+        System.out.println("  Buyer Confirmed:  " + txn.isBuyerConfirmed());
+        System.out.println("  Seller Confirmed: " + txn.isSellerConfirmed());
+
+        return txn;
+    }
+
+    // ─── Delivered_Trans ─────────────────────────────────────────────────────
+
+    /**
+     * Marks a transaction as delivered — the buyer confirms they received the item.
+     * After this, the system moves both users to the rating/review screen.
+     * Corresponds to Delivered_Trans(bxnID) in the Client class.
+     *
+     * @param bxnID       The transaction ID.
+     * @param buyerUserID The buyer confirming delivery.
+     * @return true if marked as delivered, false otherwise.
+     */
+    public boolean Delivered_Trans(String bxnID, String buyerUserID) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn == null) {
+            System.out.println("[TransactionManager] Delivered_Trans FAILED: transaction " + bxnID + " not found.");
+            return false;
+        }
+
+        if (!txn.getBuyerUserID().equals(buyerUserID)) {
+            System.out.println("[TransactionManager] Delivered_Trans REJECTED: only the buyer can mark delivery.");
+            return false;
+        }
+
+        if (txn.Status(bxnID) != TransactionStatus.BOTH_CONFIRMED
+                && txn.Status(bxnID) != TransactionStatus.COMPLETED) {
+            System.out.println("[TransactionManager] Delivered_Trans FAILED: "
+                    + "transaction must be in BOTH_CONFIRMED state first. Current: " + txn.Status(bxnID));
+            return false;
+        }
+
+        boolean released = txn.Release_Payment(bxnID);
+
+        if (released) {
+            System.out.println("[TransactionManager] Transaction " + bxnID + " marked as DELIVERED. "
+                    + "Both users routed to rating/review screen.");
+
+            AuditTrail.LogTransaction(
+                    bxnID,
+                    LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME),
+                    buyerUserID,
+                    "Buyer confirmed item delivery. Transaction completed."
+            );
+        }
+
+        return released;
+    }
+
+    // ─── Cancel_Trans ────────────────────────────────────────────────────────
+
+    /**
+     * Cancels a transaction. Can be called by either buyer or seller.
+     * Cannot cancel once both parties have already confirmed.
+     * Corresponds to Cancel_Trans(bxnID) in the Client class.
+     *
+     * @param bxnID  The transaction ID.
+     * @param userID The user requesting the cancellation.
+     * @return true if successfully cancelled, false otherwise.
+     */
+    public boolean Cancel_Trans(String bxnID, String userID) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn == null) {
+            System.out.println("[TransactionManager] Cancel_Trans FAILED: transaction " + bxnID + " not found.");
+            return false;
+        }
+
+        boolean cancelled = txn.cancelTransaction(userID);
+
+        if (cancelled) {
+            System.out.println("[TransactionManager] Transaction " + bxnID + " CANCELLED by user " + userID + ".");
+        }
+
+        return cancelled;
+    }
+
+    // ─── Transactions (Database query) ───────────────────────────────────────
+
+    /**
+     * Retrieves a transaction from the database by its ID.
+     * Corresponds to Transactions(bxnID) in the Database class.
+     *
+     * @param bxnID The transaction ID to look up.
+     * @return The Transaction, or null if not found.
+     */
+    public Transaction Transactions(String bxnID) {
+        Transaction txn = activeTransactions.get(bxnID);
+        if (txn != null) return txn;
+        return TransactionDatabase.getTransaction(bxnID);
+    }
+
+    // ─── Utility ─────────────────────────────────────────────────────────────
+
+    /**
+     * Shuts down the executor service. Call when the application is closing.
+     */
+    public void shutdown() {
+        executorService.shutdown();
+        System.out.println("[TransactionManager] Executor service shut down.");
+    }
+}
 
