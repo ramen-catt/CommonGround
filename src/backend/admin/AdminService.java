@@ -1,7 +1,6 @@
 package com.commonground.admin;
 
-//order of events that goes on here 
-// This is the brain of the admin feature. Same pattern as ListingService:
+
 //   1. Takes input from UI
 //   2. Checks the caller is actually an admin before doing anything
 //   3. Calls AdminDAO to do the database work

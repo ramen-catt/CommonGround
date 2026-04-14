@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.commonground</groupId>
+    <artifactId>CommonGround</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>war</packaging>
+
+    <dependencies>
+
+        <!-- Servlet API - lets you write servlets -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- MySQL Driver - connects to your database -->
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+            <version>8.0.33</version>
+        </dependency>
+
+    </dependencies>
+
+    <build>
+
+        <!-- tells Maven your Java files are in src/backend -->
+        <sourceDirectory>src/backend</sourceDirectory>
+
+        <!-- tells Maven your HTML files are in src/frontend -->
+        <resources>
+            <resource>
+                <directory>src/frontend</directory>
+            </resource>
+        </resources>
+
+        <plugins>
+
+            <!-- Java version -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+                <configuration>
+                    <source>17</source>
+                    <target>17</target>
+                </configuration>
+            </plugin>
+
+            <!-- builds the WAR file that goes into Tomcat -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.4.0</version>
+                <configuration>
+                    <!-- tells Maven your webapp folder is src/frontend -->
+                    <warSourceDirectory>src/frontend</warSourceDirectory>
+                    <!-- stops Maven complaining if web.xml is missing -->
+                    <failOnMissingWebXml>false</failOnMissingWebXml>
+                </configuration>
+            </plugin>
+
+        </plugins>
+
+    </build>
+
+</project>
