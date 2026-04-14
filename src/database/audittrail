@@ -1,1 +1,140 @@
+package database;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * AuditTrail — Immutable log of all significant system events.
+ *
+ * Corresponds to the AuditTrail class in the CommonGround class diagram:
+ *   CreateRecord(RecordType(transaction, listing, newuser, etc.), RecordID)
+ *   LogTransaction(ID, time, Client, info)
+ */
+public class AuditTrail {
+
+    /**
+     * Inner class representing a single audit log entry.
+     */
+    public static class AuditRecord {
+        private final String recordType;  // e.g. "transaction", "listing", "newuser"
+        private final String recordID;
+        private final String timestamp;
+        private final String client;
+        private final String info;
+
+        public AuditRecord(String recordType, String recordID,
+                           String timestamp, String client, String info) {
+            this.recordType = recordType;
+            this.recordID = recordID;
+            this.timestamp = timestamp;
+            this.client = client;
+            this.info = info;
+        }
+
+        public String getRecordType() { return recordType; }
+        public String getRecordID()   { return recordID; }
+        public String getTimestamp()  { return timestamp; }
+        public String getClient()     { return client; }
+        public String getInfo()       { return info; }
+
+        @Override
+        public String toString() {
+            return "[AUDIT | " + recordType.toUpperCase() + " | " + timestamp + "] "
+                    + "ID=" + recordID + " | Client=" + client + " | " + info;
+        }
+    }
+
+    // In-memory audit log (in production: write to DB or append-only log file)
+    private static final List<AuditRecord> auditLog = new ArrayList<>();
+
+    // ─── CreateRecord ────────────────────────────────────────────────────────
+
+    /**
+     * Creates a general audit record for any significant system event.
+     * Corresponds to CreateRecord(RecordType, RecordID) in the class diagram.
+     *
+     * @param recordType The type of record (e.g. "transaction", "listing", "newuser").
+     * @param recordID   The ID of the entity being recorded.
+     * @param info       Descriptive information about the event.
+     */
+    public static void CreateRecord(String recordType, String recordID, String info) {
+        String timestamp = java.time.LocalDateTime.now()
+                .format(java.time.format.DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+
+        AuditRecord record = new AuditRecord(recordType, recordID, timestamp, "SYSTEM", info);
+        auditLog.add(record);
+        System.out.println("[AuditTrail] " + record);
+    }
+
+    // ─── LogTransaction ──────────────────────────────────────────────────────
+
+    /**
+     * Logs a transaction-specific event to the audit trail.
+     * Corresponds to LogTransaction(ID, time, Client, info) in the class diagram.
+     *
+     * @param ID     The transaction ID (bxnID).
+     * @param time   The timestamp of the event.
+     * @param client The client (user or system) responsible for the event.
+     * @param info   Description of what happened.
+     */
+    public static void LogTransaction(String ID, String time, String client, String info) {
+        AuditRecord record = new AuditRecord("transaction", ID, time, client, info);
+        auditLog.add(record);
+        System.out.println("[AuditTrail] " + record);
+    }
+
+    // ─── Query ───────────────────────────────────────────────────────────────
+
+    /**
+     * Returns all audit records.
+     *
+     * @return An unmodifiable view of all audit records.
+     */
+    public static List<AuditRecord> getAllRecords() {
+        return java.util.Collections.unmodifiableList(auditLog);
+    }
+
+    /**
+     * Returns all audit records for a specific record ID.
+     *
+     * @param recordID The ID to search for.
+     * @return List of matching audit records.
+     */
+    public static List<AuditRecord> getRecordsByID(String recordID) {
+        List<AuditRecord> results = new ArrayList<>();
+        for (AuditRecord record : auditLog) {
+            if (record.getRecordID().equals(recordID)) {
+                results.add(record);
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Returns all audit records of a specific type.
+     *
+     * @param recordType The type to filter by (e.g. "transaction").
+     * @return List of matching audit records.
+     */
+    public static List<AuditRecord> getRecordsByType(String recordType) {
+        List<AuditRecord> results = new ArrayList<>();
+        for (AuditRecord record : auditLog) {
+            if (record.getRecordType().equalsIgnoreCase(recordType)) {
+                results.add(record);
+            }
+        }
+        return results;
+    }
+
+    /**
+     * Prints the full audit trail to standard output.
+     */
+    public static void printFullAuditLog() {
+        System.out.println("\n===== FULL AUDIT TRAIL (" + auditLog.size() + " entries) =====");
+        for (AuditRecord record : auditLog) {
+            System.out.println(record);
+        }
+        System.out.println("============================================\n");
+    }
+}
 
