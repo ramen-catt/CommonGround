@@ -17,7 +17,7 @@ CREATE TABLE account (
 account_id INT auto_increment PRIMARY KEY,
 username VARCHAR(50) NOT NULL UNIQUE,
 password_hash VARCHAR(255) NOT NULL,
-phone_number VARCHAR(20),
+phone_number BIGINT,
 address VARCHAR(255),
 email VARCHAR(100) NOT NULL UNIQUE,
 is_admin BOOLEAN DEFAULT FALSE,
