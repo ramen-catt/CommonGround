@@ -1,0 +1,190 @@
+package transactions;
+
+/**
+ * TransactionValidator — Input validation utilities for the transaction section.
+ *
+ * Per project specification (Dr. Burris):
+ * Since CommonGround simulates transactions (no real payment processing),
+ * validation only checks that user inputs are correctly formatted.
+ * No actual bank/card verification is performed.
+ *
+ * Validation rules:
+ *   - Agreed price: must be a positive numeric value (no letters)
+ *   - Payment handles: format-checked per payment method
+ *   - Transaction IDs: must match the BXN-XXXXXXXX pattern
+ *   - User IDs: must be non-null and non-empty
+ */
+public class TransactionValidator {
+
+    // ─── Price Validation ────────────────────────────────────────────────────
+
+    /**
+     * Validates that the given price string is a valid positive dollar amount.
+     * Rejects: letters, negative values, zero, empty strings.
+     *
+     * @param priceInput The raw string entered by the user.
+     * @return true if valid, false otherwise.
+     */
+    public static boolean isValidPrice(String priceInput) {
+        if (priceInput == null || priceInput.trim().isEmpty()) {
+            System.out.println("[Validator] Price is empty.");
+            return false;
+        }
+
+        // Remove optional leading "$" and whitespace
+        String cleaned = priceInput.trim().replaceAll("^\\$", "");
+
+        // Must match: optional digits, exactly one decimal point, exactly two decimal digits
+        // OR just digits (whole dollar amount)
+        if (!cleaned.matches("^\\d+(\\.\\d{1,2})?$")) {
+            System.out.println("[Validator] Invalid price format: '" + priceInput
+                    + "'. Price must be a positive number (e.g. 25, 25.00, 9.99).");
+            return false;
+        }
+
+        double price;
+        try {
+            price = Double.parseDouble(cleaned);
+        } catch (NumberFormatException e) {
+            System.out.println("[Validator] Price is not a valid number: " + priceInput);
+            return false;
+        }
+
+        if (price <= 0) {
+            System.out.println("[Validator] Price must be greater than $0.00. Got: " + price);
+            return false;
+        }
+
+        return true;
+    }
+
+    // ─── Payment Handle Validation ───────────────────────────────────────────
+
+    /**
+     * Validates a payment handle string for the given payment method.
+     * Handles can be empty for CASH or OTHER (those don't require a handle).
+     *
+     * @param handle The payment handle entered by the user.
+     * @param method The selected PaymentMethod.
+     * @return true if valid, false otherwise.
+     */
+    public static boolean isValidPaymentHandle(String handle, PaymentMethod method) {
+        if (method == PaymentMethod.CASH || method == PaymentMethod.OTHER) {
+            return true; // No handle needed
+        }
+
+        if (handle == null || handle.trim().isEmpty()) {
+            // Handles are optional — if blank, still valid
+            return true;
+        }
+
+        String trimmed = handle.trim();
+
+        switch (method) {
+            case ZELLE:
+                boolean zellePhone = trimmed.matches("\\d{10}");
+                boolean zelleEmail = trimmed.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
+                if (!zellePhone && !zelleEmail) {
+                    System.out.println("[Validator] Invalid Zelle handle: must be 10-digit phone or email. Got: " + trimmed);
+                    return false;
+                }
+                break;
+
+            case CASHAPP:
+                if (!trimmed.matches("^\\$[A-Za-z0-9_]{1,20}$")) {
+                    System.out.println("[Validator] Invalid CashApp handle: must be '$username' (1-20 alphanumeric). Got: " + trimmed);
+                    return false;
+                }
+                break;
+
+            case VENMO:
+                if (!trimmed.matches("^@[A-Za-z0-9_-]{1,30}$")) {
+                    System.out.println("[Validator] Invalid Venmo handle: must be '@username'. Got: " + trimmed);
+                    return false;
+                }
+                break;
+
+            case PAYPAL:
+                boolean ppEmail = trimmed.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
+                boolean ppPhone = trimmed.matches("\\d{10,15}");
+                if (!ppEmail && !ppPhone) {
+                    System.out.println("[Validator] Invalid PayPal handle: must be email or phone. Got: " + trimmed);
+                    return false;
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        return true;
+    }
+
+    // ─── Transaction ID Validation ───────────────────────────────────────────
+
+    /**
+     * Validates that a transaction ID matches the expected format: BXN-XXXXXXXX
+     * where X is an uppercase alphanumeric character.
+     *
+     * @param bxnID The transaction ID to validate.
+     * @return true if valid, false otherwise.
+     */
+    public static boolean isValidTransactionID(String bxnID) {
+        if (bxnID == null || bxnID.trim().isEmpty()) {
+            System.out.println("[Validator] Transaction ID is null or empty.");
+            return false;
+        }
+        boolean valid = bxnID.matches("^BXN-[A-Z0-9]{8}$");
+        if (!valid) {
+            System.out.println("[Validator] Invalid transaction ID format: '" + bxnID
+                    + "'. Expected format: BXN-XXXXXXXX");
+        }
+        return valid;
+    }
+
+    // ─── User ID Validation ──────────────────────────────────────────────────
+
+    /**
+     * Validates that a user ID is non-null and non-empty.
+     *
+     * @param userID The user ID to validate.
+     * @return true if valid, false otherwise.
+     */
+    public static boolean isValidUserID(String userID) {
+        if (userID == null || userID.trim().isEmpty()) {
+            System.out.println("[Validator] User ID cannot be null or empty.");
+            return false;
+        }
+        return true;
+    }
+
+    // ─── Full PaymentInfo Validation ─────────────────────────────────────────
+
+    /**
+     * Validates an entire PaymentInfo object.
+     *
+     * @param paymentInfo The payment info to validate.
+     * @return true if all fields are valid, false otherwise.
+     */
+    public static boolean isValidPaymentInfo(PaymentInfo paymentInfo) {
+        if (paymentInfo == null) {
+            System.out.println("[Validator] PaymentInfo cannot be null.");
+            return false;
+        }
+
+        if (paymentInfo.getMethod() == null) {
+            System.out.println("[Validator] Payment method must be selected.");
+            return false;
+        }
+
+        if (!isValidPrice(String.valueOf(paymentInfo.getAgreedPrice()))) {
+            return false;
+        }
+
+        if (!isValidPaymentHandle(paymentInfo.getPaymentHandle(), paymentInfo.getMethod())) {
+            return false;
+        }
+
+        return true;
+    }
+}

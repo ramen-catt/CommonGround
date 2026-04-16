@@ -1,0 +1,60 @@
+class MessageRec
+{
+    int id = 0;
+    String sender = "";
+    String receiver = "";
+    String content = "";
+    Time timestamp;
+
+    public MessageRec(int id, String sender, String receiver, String msg, Time timestamp)
+    {
+        this.id = id;
+        this.sender = sender;
+        this.receiver = receiver;
+        this.content = msg;
+        this.timestamp = timestamp;
+    }
+
+    // Getters
+    public int getId() {
+        return id;
+    }
+
+    public String getSender() {
+        return sender;
+    }
+
+    public String getReceiver() {
+        return receiver;
+    }
+
+    public String getContent() {
+        return content;
+    }
+
+    public Time getTimestamp() {
+        return timestamp;
+    }
+
+    // Setters
+    public void setId(int id) {
+        this.id = id;
+    }
+
+    public void setSender(String sender) {
+        this.sender = sender;
+    }
+
+    public void setReceiver(String receiver) {
+        this.receiver = receiver;
+    }
+
+    public void setContent(String content) {
+        this.content = content;
+    }
+
+    public void setTimestamp(Time timestamp) {
+        this.timestamp = timestamp;
+    }
+
+}

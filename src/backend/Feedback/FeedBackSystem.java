@@ -8,14 +8,14 @@ import java.util.Scanner;
 public class FeedBackSystem {
 
     private static final Scanner sc = new Scanner(System.in);
-
+    // Connect to the Database
     private static final String url = "jdbc:mysql://localhost:3306/CommonGround_db";
     private static final String user = "root";//"cguser";
     private static final String pass = "Messi10?";//"cgpass123";
 
     public static void main(String[] args) {
         System.out.print("====FeedBack Collection System====");
-
+        // All the diffrent options
         while (true) {
             System.out.println("\n1. Submit Review");
             System.out.println("2. Submit Report");
@@ -70,6 +70,7 @@ public class FeedBackSystem {
             }
         }
     }
+    // Get input
     public static int getIntInput(String prompt) {
         while (true){
             System.out.print(prompt);
@@ -84,10 +85,12 @@ public class FeedBackSystem {
             }
         }
     }
+    // Get string
     private static String getStringInput(String prompt){
         System.out.println(prompt);
         return sc.nextLine().trim();
     }
+    // Submit a review
     private static void submitReview() {
         System.out.println("\n=== Submit Review ===");
         int buyerId = getIntInput("Enter Buyer ID: ");
@@ -101,6 +104,7 @@ public class FeedBackSystem {
 
         System.out.println("Review submitted");
     }
+    // Submit a report
     private static void submitReport() {
         System.out.println("\n === Submit Report ===");
         int buyerId = getIntInput("Enter Buyer ID: ");
@@ -115,6 +119,7 @@ public class FeedBackSystem {
 
         System.out.println("Report submitted");
     }
+    // View the feedback for a certain listing ID 
     private static void viewAllFeedbackForListing(){
         System.out.println("\n === View All Feedback for Listing ===");
         int listingId = getIntInput("Enter Listing ID: "); 
@@ -127,6 +132,7 @@ public class FeedBackSystem {
             System.out.println(fb);
         }
     }
+    // View the listing stats for a certain listing ID (Avg rating, total review (reviews only), total review, total report)
     private static void viewListingStats(){
         System.out.println("\n === Listing Stats ===");
         int listingId = getIntInput("Enter Listing ID: ");
@@ -142,6 +148,7 @@ public class FeedBackSystem {
         System.out.println("Total Reports: " + reportCount);
         System.out.println("===============\n");
     }
+    // Gives average for certain listing 
     private static void showAverageRatingAll() {
         System.out.println("\n === Average Rating (All Feedback) ===");
         int listingId = getIntInput("Enter Listing ID: ");
@@ -152,6 +159,7 @@ public class FeedBackSystem {
             System.out.println("Average Rating: " + avg);
         }
     }
+    // Gives average for the reviews only
     private static void showAverageRatingReviewsOnly() {
         System.out.println("\n === Average Rating (Reviews Only) ===");
         int listingId = getIntInput("Enter Listing ID: "); 
@@ -162,30 +170,35 @@ public class FeedBackSystem {
             System.out.println("Average Rating (Reviews only): " + avg);
         }
     }
+    // Show the amount of reviews a listing has
     private static void showReviewCount() {
         System.out.println("\n === Review Count ===");
         int listingId = getIntInput("Enter Listing ID: ");
         int count = getReviewCountDB(listingId);
         System.out.println("Total Reviews: " + count);
     }
+    // Show the amount of report a listing has
     private static void showReportCount() {
         System.out.println("\n === Report Count ===");
         int listingId = getIntInput("Enter Listing ID: ");
         int count = getReportCount(listingId);
         System.out.println("Total Reports: " + count);
     }
+    // Remove a review
     private static void removeReviewMenu(){
         System.out.println("\n=== Remove Review ===");
         int feedbackId = getIntInput("Enter Feedback ID to remove (Review): ");
         removeReview(feedbackId);
         System.out.println("If a review with that ID existed, it has been removed");
     }
+    // Remove a report
     private static void removeReportMenu(){
         System.out.println("\n=== Remove Report ===");
         int feedbackId = getIntInput("Enter Feedback ID to remove (Report): ");
         removeReport(feedbackId);
         System.out.println("If a report with that ID existed, it has been removed");
     }
+    // Add a review to the database
     private static void addReview(FeedBack fb){
         String sql = "INSERT INTO feedback (buyer_Id, seller_id, listing_id, rating, rating_report, rating_desc) "
                 + "VALUES (?, ?, ?, ?, FALSE, ?)";
@@ -204,6 +217,7 @@ public class FeedBackSystem {
             e.printStackTrace();
         }
     }
+    // Add a report to the database
     private static void addReport(FeedBack fb){
         String sql = "INSERT INTO feedback (buyer_Id, seller_id, listing_id, rating, rating_report, rating_desc, report_desc) "
                          + "VALUES (?, ?, ?, ?, TRUE, ?, ?)"; 
@@ -223,6 +237,7 @@ public class FeedBackSystem {
             e.printStackTrace();
         }
     }
+    // Get the feedback from the database
     private static List<FeedBack> getFeedbackForListing(int listingId) {
         List<FeedBack> list = new ArrayList<>();
 
@@ -263,6 +278,7 @@ public class FeedBackSystem {
 
         return list;
     }
+    // Remove a review from the database
     private static void removeReview(int feedbackId) {
         String sql = "DELETE FROM feedback WHERE feedback_id = ? AND rating_report = FALSE";
 
@@ -275,6 +291,7 @@ public class FeedBackSystem {
             e.printStackTrace();
         }
     }
+    // Remove a report from the database
     public static void removeReport(int feedbackId) {
         String sql = "DELETE FROM feedback WHERE feedback_id = ? AND rating_report = TRUE";
 
@@ -287,6 +304,7 @@ public class FeedBackSystem {
             e.printStackTrace();
         }
     }
+    // Get the average from rating in the database
     private static double getAverageRatingAll(int listingId){
         String sql = "SELECT AVG(rating) FROM feedback WHERE listing_id = ?";
 
@@ -304,6 +322,7 @@ public class FeedBackSystem {
         }
         return 0;
     }
+    // Get the average from reports in the database
     private static double getReviewAverage(int listingId){
         String sql = "SELECT AVG(rating) FROM feedback WHERE listing_id = ? AND rating_report = FALSE";
 
@@ -321,6 +340,7 @@ public class FeedBackSystem {
         }
         return 0;
     }
+    // Get review count from the database
     private static int getReviewCountDB(int listingId){
         String sql = "SELECT COUNT(*) FROM feedback WHERE listing_id = ? AND rating_report = FALSE";
 
@@ -338,6 +358,7 @@ public class FeedBackSystem {
         }
         return 0;
     }
+    // Get the reports from the database
     public static int getReportCount(int listingId){
         String sql = "SELECT COUNT(*) FROM feedback WHERE listing_id = ?  AND rating_report = TRUE";
 

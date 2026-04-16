@@ -1,0 +1,13 @@
+package com.app.audit;
+
+public enum RecordType {
+    TRANSACTION,
+    LISTING,
+    NEW_USER,
+    MEETUP,
+    FEEDBACK,
+    MESSAGE,
+    ACCOUNT_REMOVAL,
+    MAP_ACTIVITY,
+    PAYMENT
+}

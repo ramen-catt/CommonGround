@@ -1,0 +1,167 @@
+package transactions;
+
+import database.AuditTrail;
+import database.TransactionDatabase;
+
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
+/**
+ * TransactionDemo — Demonstrates the CommonGround transaction system.
+ *
+ * Run this class to see the full transaction flow:
+ *   1. Buyer initiates purchase
+ *   2. Payment info is validated
+ *   3. Buyer and seller both press 'Confirm' on separate threads (real-time)
+ *   4. Both users proceed to the rating/review screen simultaneously
+ *   5. Audit trail is printed
+ *
+ * Also demonstrates cancellation and validation rejection scenarios.
+ */
+public class TransactionDemo {
+
+    public static void main(String[] args) throws InterruptedException {
+
+        System.out.println("========================================================");
+        System.out.println("  CommonGround — Transaction System Demo");
+        System.out.println("========================================================\n");
+
+        TransactionManager manager = new TransactionManager();
+
+        // ── Demo 1: Successful Transaction with Dual Confirmation ─────────────
+
+        System.out.println("--- DEMO 1: Successful Transaction (Zelle) ---\n");
+
+        PaymentInfo payment1 = new PaymentInfo(
+                PaymentMethod.ZELLE,
+                45.00,
+                "4045551234"  // Valid 10-digit Zelle phone
+        );
+
+        // Buyer initiates purchase
+        Transaction txn1 = manager.Make_Purchase(
+                "LIST-001",      // listing ID
+                "user_buyer_01", // buyer
+                "user_seller_99",// seller
+                payment1
+        );
+
+        if (txn1 != null) {
+            System.out.println("\nTransaction created: " + txn1.getBxnID());
+
+            // ── Simulate both users pressing 'Confirm' concurrently ───────────
+            // A CountDownLatch ensures the demo waits for both threads to complete
+
+            CountDownLatch demoLatch = new CountDownLatch(1);
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+
+            System.out.println("\n>>> Both users are now on the confirmation screen...\n");
+
+            // Simulate slight delay before each user clicks — makes it feel realistic
+            String bxnID = txn1.getBxnID();
+
+            pool.submit(() -> {
+                try { Thread.sleep(300); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                manager.userPressedConfirm(bxnID, "user_buyer_01", (id, buyer, seller) -> {
+                    System.out.println("\n[SYSTEM] >>> Both confirmed! Routing buyer " + buyer
+                            + " to rating/review screen for transaction " + id + ".");
+                });
+            });
+
+            pool.submit(() -> {
+                try { Thread.sleep(700); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                manager.userPressedConfirm(bxnID, "user_seller_99", (id, buyer, seller) -> {
+                    System.out.println("[SYSTEM] >>> Both confirmed! Routing seller " + seller
+                            + " to rating/review screen for transaction " + id + ".");
+                    demoLatch.countDown();
+                });
+            });
+
+            // Wait for both confirmations to complete
+            demoLatch.await();
+            pool.shutdown();
+
+            // Buyer marks item as delivered
+            System.out.println();
+            manager.Delivered_Trans(bxnID, "user_buyer_01");
+
+            // Review the transaction
+            System.out.println();
+            manager.Review_Trans(bxnID, "user_buyer_01");
+        }
+
+        // ── Demo 2: CashApp Transaction ───────────────────────────────────────
+
+        System.out.println("\n\n--- DEMO 2: Transaction with CashApp ---\n");
+
+        PaymentInfo payment2 = new PaymentInfo(PaymentMethod.CASHAPP, 120.00, "$johndoe");
+        Transaction txn2 = manager.Make_Purchase("LIST-002", "user_alice", "user_bob", payment2);
+
+        if (txn2 != null) {
+            System.out.println("Transaction " + txn2.getBxnID() + " created. Status: " + txn2.getStatus());
+            System.out.println("Check sold status before confirmation: "
+                    + txn2.Check_Sold_Status("LIST-002"));
+        }
+
+        // ── Demo 3: Cancellation ──────────────────────────────────────────────
+
+        System.out.println("\n\n--- DEMO 3: Transaction Cancellation ---\n");
+
+        PaymentInfo payment3 = new PaymentInfo(PaymentMethod.CASH, 30.00);
+        Transaction txn3 = manager.Make_Purchase("LIST-003", "user_buyer_X", "user_seller_Y", payment3);
+
+        if (txn3 != null) {
+            System.out.println("Transaction created: " + txn3.getBxnID());
+            manager.Cancel_Trans(txn3.getBxnID(), "user_buyer_X");
+            System.out.println("Status after cancellation: " + txn3.getStatus());
+        }
+
+        // ── Demo 4: Validation Failures ───────────────────────────────────────
+
+        System.out.println("\n\n--- DEMO 4: Validation Rejection Scenarios ---\n");
+
+        // Bad price (letters in price)
+        System.out.println("Testing invalid price 'abc':");
+        System.out.println("Valid? " + TransactionValidator.isValidPrice("abc"));
+
+        // Negative price
+        System.out.println("\nTesting negative price '-10':");
+        System.out.println("Valid? " + TransactionValidator.isValidPrice("-10"));
+
+        // Bad CashApp handle (missing $)
+        System.out.println("\nTesting invalid CashApp handle 'johndoe' (missing $):");
+        System.out.println("Valid? " + TransactionValidator.isValidPaymentHandle("johndoe", PaymentMethod.CASHAPP));
+
+        // Bad Zelle handle (has letters)
+        System.out.println("\nTesting invalid Zelle phone '40455abc89':");
+        System.out.println("Valid? " + TransactionValidator.isValidPaymentHandle("40455abc89", PaymentMethod.ZELLE));
+
+        // Valid Venmo
+        System.out.println("\nTesting valid Venmo '@jane_doe':");
+        System.out.println("Valid? " + TransactionValidator.isValidPaymentHandle("@jane_doe", PaymentMethod.VENMO));
+
+        // Zero price transaction (should fail authorization)
+        System.out.println("\nTesting transaction with $0.00 price (should fail authorization):");
+        PaymentInfo badPayment = new PaymentInfo(PaymentMethod.CASH, 0.00);
+        Transaction badTxn = manager.Make_Purchase("LIST-999", "buyer1", "seller1", badPayment);
+        System.out.println("Transaction created: " + (badTxn != null ? badTxn.getBxnID() : "REJECTED (expected)"));
+
+        // ── Demo 5: Database query ────────────────────────────────────────────
+
+        System.out.println("\n\n--- DEMO 5: Database Lookup ---\n");
+        System.out.println("Total transactions in database: " + TransactionDatabase.getTotalTransactionCount());
+        System.out.println("Transactions by user_buyer_01: "
+                + TransactionDatabase.getTransactionsByUser("user_buyer_01").size());
+
+        // ── Print Audit Trail ─────────────────────────────────────────────────
+
+        System.out.println("\n\n--- FULL AUDIT TRAIL ---");
+        AuditTrail.printFullAuditLog();
+
+        manager.shutdown();
+        System.out.println("========================================================");
+        System.out.println("  Demo complete.");
+        System.out.println("========================================================");
+    }
+}
