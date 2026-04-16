@@ -1,0 +1,19 @@
+package transactions;
+
+/**
+ * Enum representing the accepted payment methods for CommonGround transactions.
+ *
+ * NOTE (per Dr. Burris / project spec):
+ * CommonGround does NOT process actual money transfers.
+ * Users are responsible for completing payments themselves via one of
+ * the methods below. CommonGround only records the agreed-upon method.
+ */
+public enum PaymentMethod {
+    CASH,
+    ZELLE,
+    CASHAPP,
+    VENMO,
+    PAYPAL,
+    OTHER
+}
+
