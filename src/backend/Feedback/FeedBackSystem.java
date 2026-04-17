@@ -10,8 +10,8 @@ public class FeedBackSystem {
     private static final Scanner sc = new Scanner(System.in);
     // Connect to the Database
     private static final String url = "jdbc:mysql://localhost:3306/CommonGround_db";
-    private static final String user = "root";//"cguser";
-    private static final String pass = "Messi10?";//"cgpass123";
+    private static final String user = "cguser";
+    private static final String pass = "cgpass123";
 
     public static void main(String[] args) {
         System.out.print("====FeedBack Collection System====");
