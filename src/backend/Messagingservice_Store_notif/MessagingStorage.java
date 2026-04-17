@@ -5,18 +5,18 @@ class MessagingStorage {
 
     }
 
-    public void GetConversation(int senderId, int recieverId)// grabs all messages between senderId and recieverId and
-                                                             // returns them in an array
+    public void GetConversation(int senderId, int recieverId)
     {
 
     }
 
     public String GetMessage(int senderId)// grabs message with senderId and returns it
     {
-
+        return "";
     }
 
-    public void DeleteMsgRec(int msgId) {
+    public void DeleteMsgRec(int msgId) 
+    {
 
     }
 

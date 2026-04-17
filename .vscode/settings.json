@@ -15,5 +15,7 @@
             "database": "CommonGround_db",
             "password": "root"
         }
-    ]
+    ],
+    "github.copilot.chat.agent.autoFix": true,
+    "github.copilot.chat.claudeAgent.allowDangerouslySkipPermissions": true
 }
