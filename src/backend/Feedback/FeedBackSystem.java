@@ -1,5 +1,11 @@
 package com.commonground.feedback;
 
+/*
+There could be some changes made if I did not understand the design.
+I added things that the user can do but I'm not sure if we want the user to be able to do all of these things update if needed.
+Change names too if they do not make sense.
+*/
+
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
