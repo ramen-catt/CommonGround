@@ -11,5 +11,8 @@ public class MessagingTest {
     public static void main(String args[]) throws SQLException {
         MessagingService messagingService = new MessagingService();
         messagingService.SendMessage();
+        messagingService.Open_Conversation(1);
+        messagingService.Delete(1, 3);
+        messagingService.Open_Conversation(1);
     }
 }
