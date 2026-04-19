@@ -82,6 +82,13 @@
                 <configuration>
                     <!-- packages the built React app instead of raw frontend source -->
                     <warSourceDirectory>src/frontend/Code for UI/dist</warSourceDirectory>
+                    <!-- include web.xml and context.xml from src/main/webapp -->
+                    <webXml>src/main/webapp/WEB-INF/web.xml</webXml>
+                    <webResources>
+                        <resource>
+                            <directory>src/main/webapp</directory>
+                        </resource>
+                    </webResources>
                     <!-- ignore stale IDE-built classes from old package names -->
                     <packagingExcludes>
                         WEB-INF/classes/admin/**,

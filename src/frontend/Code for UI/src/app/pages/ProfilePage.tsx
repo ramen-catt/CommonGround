@@ -21,14 +21,14 @@ interface UserProfile {
 export function ProfilePage() {
   const { email } = useParams<{ email: string }>();
   const navigate = useNavigate();
-  const { user: currentUser, signOut } = useAuth();
+  const { user: currentUser, signOut, isAuthLoading } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userListings, setUserListings] = useState<any[]>([]);
   const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // we only support viewing your own profile right now
+    if (isAuthLoading) return; // wait for the session check to finish
     if (!currentUser) { setLoading(false); return; }
 
     setLoading(true);
@@ -52,7 +52,7 @@ export function ProfilePage() {
         setUserListings([]);
       })
       .finally(() => setLoading(false));
-  }, [email, currentUser]);
+  }, [email, currentUser, isAuthLoading]);
 
   const handleDeleteAccount = async () => {
     // just sign them out for now — full account deletion needs a backend endpoint
@@ -93,7 +93,7 @@ export function ProfilePage() {
     );
   }
 
-  if (loading) {
+  if (isAuthLoading || loading) {
     return (
       <div className="min-h-screen bg-red-50 flex items-center justify-center">
         <p className="text-gray-500">Loading profile...</p>
