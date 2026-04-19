@@ -1,0 +1,32 @@
+package Map;
+
+import java.sql.*;
+
+public class TransactionInfoPulling {
+    private String url = "jdbc:mysql://localhost:3306/CommonGround_db";
+    private String username = "cguser";
+    private String password = "cgpass123";
+
+    public User[] pullUsers(int transactionId) {
+        User buyer = null;
+        User seller = null;
+
+        String query = "SELECT t.buyer_id, t.seller_id, a1.address AS b_addr, a2.address AS s_addr " +
+                "FROM transactions t " +
+                "JOIN account a1 ON t.buyer_id = a1.account_id " +
+                "JOIN account a2 ON t.seller_id = a2.account_id " +
+                "WHERE t.transaction_id = ?";
+
+        try (Connection conn = DriverManager.getConnection(url, username, password);
+             PreparedStatement stmt = conn.prepareStatement(query)) {
+            stmt.setInt(1, transactionId);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                buyer = new User(rs.getInt("buyer_id"), rs.getString("b_addr"));
+                seller = new User(rs.getInt("seller_id"), rs.getString("s_addr"));
+            }
+        } catch (SQLException e) { e.printStackTrace(); }
+        return new User[]{buyer, seller};
+    }
+}

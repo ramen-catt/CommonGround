@@ -1,10 +1,6 @@
 package transactions;
 
-/**
- * Enum representing all possible states of a transaction.
- * Transactions flow: PENDING -> BUYER_CONFIRMED / SELLER_CONFIRMED -> BOTH_CONFIRMED -> COMPLETED
- * or can be CANCELLED at any point before BOTH_CONFIRMED.
- */
+
 public enum TransactionStatus {
     PENDING,           // Transaction created, awaiting both parties
     BUYER_CONFIRMED,   // Buyer has hit 'confirm'

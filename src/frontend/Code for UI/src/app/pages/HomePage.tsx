@@ -3,11 +3,11 @@ import { User, Plus, LogOut, HelpCircle, Clock, Shield } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { ListingCard } from '../components/ListingCard';
 import { FilterSection, CheckboxFilter } from '../components/FilterSection';
-import { listings } from '../data/listings';
 import { FilterState, Listing } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { ChatSidebar } from '../components/ChatSidebar';
 import { SiteLogo } from '../components/SiteLogo';
+import { getListingOptions, getListings, getTransactions } from '../lib/api';
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -20,27 +20,43 @@ export function HomePage() {
 
   const [sortBy, setSortBy] = useState('recommended');
   const [pendingTransactionsCount, setPendingTransactionsCount] = useState(0);
+  const [allListings, setAllListings] = useState<Listing[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [conditionOptions, setConditionOptions] = useState<string[]>([]);
+  const [loadingListings, setLoadingListings] = useState(true);
+
+  // pull real listings from the database
+  useEffect(() => {
+    getListings()
+      .then((listings) => {
+        const loadedListings = listings as Listing[];
+        setAllListings(loadedListings);
+      })
+      .catch((err) => console.error('could not load listings', err))
+      .finally(() => setLoadingListings(false));
+  }, []);
+
+  useEffect(() => {
+    getListingOptions()
+      .then((options) => {
+        setCategoryOptions(options.categories);
+        setConditionOptions(options.conditions);
+      })
+      .catch((err) => console.error('could not load listing options from backend', err));
+  }, []);
 
   useEffect(() => {
     if (user) {
-      // Count pending transactions (where user is buyer OR seller)
-      const transactionsJson = localStorage.getItem('transactions');
-      const transactions = transactionsJson ? JSON.parse(transactionsJson) : [];
-      const pending = transactions.filter((t: any) =>
-        (t.userId === user.id || t.sellerEmail === user.email) &&
-        t.status !== 'completed' &&
-        t.status !== 'cancelled'
-      );
-      setPendingTransactionsCount(pending.length);
+      getTransactions()
+        .then((transactions) => {
+          const pending = transactions.filter((t: any) =>
+            t.status !== 'Completed' && t.status !== 'Cancelled'
+          );
+          setPendingTransactionsCount(pending.length);
+        })
+        .catch(() => setPendingTransactionsCount(0));
     }
   }, [user]);
-
-  // Combine default listings with user-created listings
-  const allListings = useMemo(() => {
-    const userListingsJson = localStorage.getItem('userListings');
-    const userListings: Listing[] = userListingsJson ? JSON.parse(userListingsJson) : [];
-    return [...listings, ...userListings];
-  }, []);
 
   const handleFilterChange = (filterType: keyof FilterState, value: string, checked: boolean) => {
     setFilters((prev) => ({
@@ -130,7 +146,7 @@ export function HomePage() {
               )}
               {isAuthenticated ? (
                 <>
-                  {user?.email === 'admin@email.com' && (
+                  {user?.isAdmin && (
                     <button
                       onClick={() => navigate('/admin')}
                       className="flex items-center space-x-2 px-5 py-2.5 bg-yellow-500 text-black hover:bg-yellow-400 rounded-lg transition-colors border border-yellow-600 font-semibold"
@@ -180,90 +196,60 @@ export function HomePage() {
               <h2 className="text-lg font-bold text-gray-900 mb-6">Filters</h2>
 
               <FilterSection title="Category">
-                <CheckboxFilter 
-                  label="Furniture" 
-                  count={listings.filter(l => l.category === 'Furniture').length}
-                  checked={filters.categories.includes('Furniture')}
-                  onChange={(checked) => handleFilterChange('categories', 'Furniture', checked)}
-                />
-                <CheckboxFilter 
-                  label="Electronics" 
-                  count={listings.filter(l => l.category === 'Electronics').length}
-                  checked={filters.categories.includes('Electronics')}
-                  onChange={(checked) => handleFilterChange('categories', 'Electronics', checked)}
-                />
-                <CheckboxFilter 
-                  label="Home Decor" 
-                  count={listings.filter(l => l.category === 'Home Decor').length}
-                  checked={filters.categories.includes('Home Decor')}
-                  onChange={(checked) => handleFilterChange('categories', 'Home Decor', checked)}
-                />
-                <CheckboxFilter 
-                  label="Office Equipment" 
-                  count={listings.filter(l => l.category === 'Office Equipment').length}
-                  checked={filters.categories.includes('Office Equipment')}
-                  onChange={(checked) => handleFilterChange('categories', 'Office Equipment', checked)}
-                />
+                {categoryOptions.map((category) => (
+                  <CheckboxFilter
+                    key={category}
+                    label={category}
+                    count={allListings.filter(l => l.category === category).length}
+                    checked={filters.categories.includes(category)}
+                    onChange={(checked) => handleFilterChange('categories', category, checked)}
+                  />
+                ))}
               </FilterSection>
 
               <FilterSection title="Price Range">
                 <CheckboxFilter 
                   label="Under $50" 
-                  count={listings.filter(l => l.price < 50).length}
+                  count={allListings.filter(l => l.price < 50).length}
                   checked={filters.priceRanges.includes('Under $50')}
                   onChange={(checked) => handleFilterChange('priceRanges', 'Under $50', checked)}
                 />
                 <CheckboxFilter 
                   label="$50 - $200" 
-                  count={listings.filter(l => l.price >= 50 && l.price <= 200).length}
+                  count={allListings.filter(l => l.price >= 50 && l.price <= 200).length}
                   checked={filters.priceRanges.includes('$50 - $200')}
                   onChange={(checked) => handleFilterChange('priceRanges', '$50 - $200', checked)}
                 />
                 <CheckboxFilter 
                   label="$200 - $500" 
-                  count={listings.filter(l => l.price > 200 && l.price <= 500).length}
+                  count={allListings.filter(l => l.price > 200 && l.price <= 500).length}
                   checked={filters.priceRanges.includes('$200 - $500')}
                   onChange={(checked) => handleFilterChange('priceRanges', '$200 - $500', checked)}
                 />
                 <CheckboxFilter 
                   label="$500 - $1000" 
-                  count={listings.filter(l => l.price > 500 && l.price <= 1000).length}
+                  count={allListings.filter(l => l.price > 500 && l.price <= 1000).length}
                   checked={filters.priceRanges.includes('$500 - $1000')}
                   onChange={(checked) => handleFilterChange('priceRanges', '$500 - $1000', checked)}
                 />
                 <CheckboxFilter 
                   label="Over $1000" 
-                  count={listings.filter(l => l.price > 1000).length}
+                  count={allListings.filter(l => l.price > 1000).length}
                   checked={filters.priceRanges.includes('Over $1000')}
                   onChange={(checked) => handleFilterChange('priceRanges', 'Over $1000', checked)}
                 />
               </FilterSection>
 
               <FilterSection title="Condition">
-                <CheckboxFilter 
-                  label="New" 
-                  count={listings.filter(l => l.condition === 'New').length}
-                  checked={filters.conditions.includes('New')}
-                  onChange={(checked) => handleFilterChange('conditions', 'New', checked)}
-                />
-                <CheckboxFilter 
-                  label="Like New" 
-                  count={listings.filter(l => l.condition === 'Like New').length}
-                  checked={filters.conditions.includes('Like New')}
-                  onChange={(checked) => handleFilterChange('conditions', 'Like New', checked)}
-                />
-                <CheckboxFilter 
-                  label="Good" 
-                  count={listings.filter(l => l.condition === 'Good').length}
-                  checked={filters.conditions.includes('Good')}
-                  onChange={(checked) => handleFilterChange('conditions', 'Good', checked)}
-                />
-                <CheckboxFilter 
-                  label="Fair" 
-                  count={listings.filter(l => l.condition === 'Fair').length}
-                  checked={filters.conditions.includes('Fair')}
-                  onChange={(checked) => handleFilterChange('conditions', 'Fair', checked)}
-                />
+                {conditionOptions.map((condition) => (
+                  <CheckboxFilter
+                    key={condition}
+                    label={condition}
+                    count={allListings.filter(l => l.condition === condition).length}
+                    checked={filters.conditions.includes(condition)}
+                    onChange={(checked) => handleFilterChange('conditions', condition, checked)}
+                  />
+                ))}
               </FilterSection>
 
               {(filters.categories.length > 0 || filters.priceRanges.length > 0 ||
@@ -310,6 +296,10 @@ export function HomePage() {
                   />
                 ))}
               </div>
+            ) : loadingListings ? (
+              <div className="text-center py-12">
+                <p className="text-gray-500 text-lg">Loading listings...</p>
+              </div>
             ) : (
               <div className="text-center py-12">
                 <p className="text-gray-500 text-lg">No listings match your filters</p>
@@ -329,7 +319,7 @@ export function HomePage() {
       {isAuthenticated && (
         <>
           {/* Post Listing - Hidden for admins and banned users */}
-          {user?.email !== 'admin@email.com' && !user?.bannedFromListing && (
+          {!user?.isAdmin && !user?.bannedFromListing && (
             <button
               onClick={() => navigate('/create-listing')}
               className="fixed bottom-8 right-8 bg-red-600 hover:bg-red-700 text-white rounded-full p-4 shadow-lg transition-all hover:shadow-xl flex items-center space-x-2 z-50"
@@ -340,7 +330,7 @@ export function HomePage() {
           )}
 
           {/* Pending Transactions Button */}
-          {pendingTransactionsCount > 0 && user?.email !== 'admin@email.com' && (
+          {pendingTransactionsCount > 0 && !user?.isAdmin && (
             <button
               onClick={() => navigate('/pending-transactions')}
               className="fixed bottom-24 right-8 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-4 shadow-lg transition-all hover:shadow-xl flex items-center space-x-2 z-50"

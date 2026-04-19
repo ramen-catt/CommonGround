@@ -17,6 +17,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 import { SiteLogo } from '../components/SiteLogo';
+import { createFeedback, getTransaction, updateTransaction } from '../lib/api';
 
 export function TransactionConfirmPage() {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export function TransactionConfirmPage() {
   const { user } = useAuth();
   
   const transactionState = location.state || {};
-  const { transactionId, sellerName, sellerEmail, buyerName, listingTitle, agreedPrice, paymentMethod, meetupLocation } = transactionState;
+  const { transactionId } = transactionState;
   
   const [transaction, setTransaction] = useState<any>(null);
   const [hasConfirmed, setHasConfirmed] = useState(false);
@@ -44,68 +45,38 @@ export function TransactionConfirmPage() {
       return;
     }
 
-    // Load transaction from localStorage
     loadTransaction();
   }, [user, transactionId, navigate]);
 
-  const loadTransaction = () => {
-    const transactionsJson = localStorage.getItem('transactions');
-    if (transactionsJson) {
-      const transactions = JSON.parse(transactionsJson);
-      const found = transactions.find((t: any) => t.id === transactionId);
-      if (found) {
-        setTransaction(found);
-        // Check if current user has already confirmed
-        const isSeller = found.sellerEmail === user?.email;
-        if (isSeller) {
-          setHasConfirmed(found.sellerConfirmed);
-        } else {
-          setHasConfirmed(found.buyerConfirmed);
-        }
-      }
+  const loadTransaction = async () => {
+    try {
+      const found = await getTransaction(transactionId);
+      setTransaction(found);
+      const isSeller = found.sellerEmail === user?.email;
+      setHasConfirmed(isSeller ? found.sellerConfirmed : found.buyerConfirmed);
+    } catch {
+      setTransaction(null);
     }
   };
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     if (!transaction) return;
 
-    const transactionsJson = localStorage.getItem('transactions');
-    if (!transactionsJson) return;
-
     const isSeller = transaction.sellerEmail === user?.email;
-
-    const transactions = JSON.parse(transactionsJson);
-    const updatedTransactions = transactions.map((t: any) => {
-      if (t.id === transactionId) {
-        if (isSeller) {
-          // Mark seller as confirmed
-          return {
-            ...t,
-            sellerConfirmed: true,
-            sellerConfirmTime: new Date().toISOString(),
-          };
-        } else {
-          // Mark buyer as confirmed
-          return {
-            ...t,
-            buyerConfirmed: true,
-            buyerConfirmTime: new Date().toISOString(),
-          };
-        }
+    try {
+      const result = await updateTransaction(transactionId, 'confirm');
+      setTransaction(result.transaction);
+      setHasConfirmed(true);
+      if (result.transaction.status === 'Completed') {
+        toast.success('Both parties confirmed. You can leave a review.');
+        setShowReviewForm(true);
+      } else if (isSeller) {
+        toast.success('Meetup confirmed! Waiting for buyer confirmation.');
+      } else {
+        toast.success('Meetup confirmed! Waiting for seller confirmation.');
       }
-      return t;
-    });
-
-    localStorage.setItem('transactions', JSON.stringify(updatedTransactions));
-    setHasConfirmed(true);
-
-    // Reload transaction to get updated state
-    loadTransaction();
-
-    if (isSeller) {
-      toast.success('Meetup confirmed! Waiting for buyer confirmation.');
-    } else {
-      toast.success('Meetup confirmed! Waiting for seller confirmation.');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not confirm transaction');
     }
   };
 
@@ -114,31 +85,19 @@ export function TransactionConfirmPage() {
     setShowSecondCancelDialog(true);
   };
 
-  const handleFinalCancelConfirm = () => {
+  const handleFinalCancelConfirm = async () => {
     if (!transaction) return;
 
-    // Cancel the transaction
-    const transactionsJson = localStorage.getItem('transactions');
-    if (!transactionsJson) return;
-
-    const transactions = JSON.parse(transactionsJson);
-    const updatedTransactions = transactions.map((t: any) => {
-      if (t.id === transactionId) {
-        return {
-          ...t,
-          status: 'cancelled',
-          cancelledAt: new Date().toISOString(),
-          cancelledBy: user?.email,
-        };
-      }
-      return t;
-    });
-
-    localStorage.setItem('transactions', JSON.stringify(updatedTransactions));
-    setIsCancelled(true);
-    setShowSecondCancelDialog(false);
-    toast.success('Transaction cancelled. You can still leave a review.');
-    setShowReviewForm(true);
+    try {
+      const result = await updateTransaction(transactionId, 'cancel');
+      setTransaction(result.transaction);
+      setIsCancelled(true);
+      setShowSecondCancelDialog(false);
+      toast.success('Transaction cancelled. You can still leave a review.');
+      setShowReviewForm(true);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not cancel transaction');
+    }
   };
 
   const handleSubmitReview = async (e: React.FormEvent) => {
@@ -157,88 +116,23 @@ export function TransactionConfirmPage() {
     setIsSubmittingReview(true);
 
     const isSeller = transaction?.sellerEmail === user?.email;
-    const usersJson = localStorage.getItem('users');
-    const users = usersJson ? JSON.parse(usersJson) : [];
+    const reviewedUserId = isSeller ? transaction?.buyerId : transaction?.sellerId;
 
-    // Determine who to review
-    const reviewedUserEmail = isSeller ? transaction?.buyerEmail : transaction?.sellerEmail;
-    const reviewedUserName = isSeller ? transaction?.buyerName : sellerName;
-    const reviewedUser = users.find((u: any) => u.email === reviewedUserEmail);
-
-    if (reviewedUser) {
-      // Create review
-      const review = {
-        id: Date.now().toString(),
-        reviewedUserEmail: reviewedUser.email,
-        reviewerName: user!.name,
+    try {
+      await createFeedback({
+        sellerId: reviewedUserId,
+        listingId: transaction.listingId,
         rating,
-        comment: reviewComment,
-        date: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-        listingTitle,
-        reviewType: isSeller ? 'buyer' : 'seller',
-        transactionId,
-      };
-
-      // Save review
-      const reviewsJson = localStorage.getItem('reviews');
-      const reviews = reviewsJson ? JSON.parse(reviewsJson) : [];
-      reviews.push(review);
-      localStorage.setItem('reviews', JSON.stringify(reviews));
-
-      // Update reviewed user's rating
-      const totalReviews = reviews.filter((r: any) => r.reviewedUserEmail === reviewedUser.email).length;
-      const sumRatings = reviews
-        .filter((r: any) => r.reviewedUserEmail === reviewedUser.email)
-        .reduce((sum: number, r: any) => sum + r.rating, 0);
-      const newRating = sumRatings / totalReviews;
-
-      const updatedUsers = users.map((u: any) => {
-        if (u.email === reviewedUser.email) {
-          return {
-            ...u,
-            rating: newRating,
-            totalReviews,
-          };
-        }
-        return u;
+        ratingDesc: reviewComment,
       });
-
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-
-      // Mark transaction as reviewed
-      const transactionsJson = localStorage.getItem('transactions');
-      if (transactionsJson) {
-        const transactions = JSON.parse(transactionsJson);
-        const updatedTransactions = transactions.map((t: any) => {
-          if (t.id === transactionId) {
-            if (isSeller) {
-              return {
-                ...t,
-                sellerReviewed: true,
-                status: t.buyerReviewed ? 'completed' : t.status,
-              };
-            } else {
-              return {
-                ...t,
-                buyerReviewed: true,
-                status: t.sellerReviewed ? 'completed' : t.status,
-              };
-            }
-          }
-          return t;
-        });
-        localStorage.setItem('transactions', JSON.stringify(updatedTransactions));
-      }
-
       setIsSubmittingReview(false);
       toast.success('Review submitted successfully!');
-
       setTimeout(() => {
         navigate('/');
       }, 1500);
-    } else {
+    } catch (err: any) {
       setIsSubmittingReview(false);
-      toast.error('Could not find user information');
+      toast.error(err.message || 'Could not submit review');
     }
   };
 
@@ -256,9 +150,9 @@ export function TransactionConfirmPage() {
   }
 
   const bothConfirmed = transaction.buyerConfirmed && transaction.sellerConfirmed;
-  const transactionCancelled = transaction.status === 'cancelled';
+  const transactionCancelled = transaction.status === 'Cancelled';
   const isSeller = transaction.sellerEmail === user?.email;
-  const hasReviewed = isSeller ? transaction.sellerReviewed : transaction.buyerReviewed;
+  const hasReviewed = false;
 
   // If both confirmed and not yet reviewed, show review form
   if (bothConfirmed && !showReviewForm && !hasReviewed && !transactionCancelled) {
@@ -324,35 +218,35 @@ export function TransactionConfirmPage() {
                     <Package className="w-5 h-5 text-red-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-500">Item</p>
-                      <p className="font-medium text-gray-900">{listingTitle}</p>
+                      <p className="font-medium text-gray-900">{transaction.listingTitle}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
                     <DollarSign className="w-5 h-5 text-red-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-500">Agreed Price</p>
-                      <p className="font-medium text-gray-900">${agreedPrice}</p>
+                      <p className="font-medium text-gray-900">${transaction.agreedPrice}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
                     <CreditCard className="w-5 h-5 text-red-600 mt-0.5" />
                     <div>
                       <p className="text-sm text-gray-500">Payment Method</p>
-                      <p className="font-medium text-gray-900 capitalize">{paymentMethod}</p>
+                      <p className="font-medium text-gray-900 capitalize">{transaction.paymentMethod}</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-3">
                     <MapPin className="w-5 h-5 text-red-600 mt-0.5" />
                     <div className="flex-1">
                       <p className="text-sm text-gray-500">Common Ground Meetup Location</p>
-                      <p className="font-medium text-gray-900">{meetupLocation?.name}</p>
-                      <p className="text-sm text-gray-600">{meetupLocation?.address}</p>
+                      <p className="font-medium text-gray-900">{transaction.meetupLocation?.name}</p>
+                      <p className="text-sm text-gray-600">{transaction.meetupLocation?.address}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Map */}
-                {meetupLocation && (
+                {transaction.meetupLocation && (
                   <div className="mt-4 rounded-lg overflow-hidden border border-gray-200">
                     <iframe
                       width="100%"
@@ -360,7 +254,11 @@ export function TransactionConfirmPage() {
                       style={{ border: 0 }}
                       loading="lazy"
                       allowFullScreen
-                      src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=Houston,TX&zoom=11`}
+                      src={
+                        transaction.meetupLocation.lat && transaction.meetupLocation.lng
+                          ? `https://www.openstreetmap.org/export/embed.html?bbox=${transaction.meetupLocation.lng - 0.01}%2C${transaction.meetupLocation.lat - 0.01}%2C${transaction.meetupLocation.lng + 0.01}%2C${transaction.meetupLocation.lat + 0.01}&layer=mapnik&marker=${transaction.meetupLocation.lat}%2C${transaction.meetupLocation.lng}`
+                          : `https://www.openstreetmap.org/search?query=${encodeURIComponent(transaction.meetupLocation.address || transaction.meetupLocation.name)}`
+                      }
                     ></iframe>
                   </div>
                 )}
@@ -473,7 +371,7 @@ export function TransactionConfirmPage() {
                 </div>
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">Transaction Complete!</h2>
                 <p className="text-gray-600">
-                  How was your experience with <strong>{transaction?.sellerEmail === user?.email ? buyerName : sellerName}</strong>?
+                  How was your experience with <strong>{transaction?.sellerEmail === user?.email ? transaction.buyerName : transaction.sellerName}</strong>?
                 </p>
               </div>
 

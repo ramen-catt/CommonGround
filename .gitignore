@@ -1,6 +1,10 @@
 node_modules/
 dist/
+target/
+out/
+.claude/
 *.log
 .env
 repo/
 index.html
+*.war

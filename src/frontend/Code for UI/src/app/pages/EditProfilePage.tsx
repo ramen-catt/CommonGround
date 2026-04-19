@@ -7,6 +7,7 @@ import { Label } from '../components/ui/label';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { SiteLogo } from '../components/SiteLogo';
+import { updateProfile } from '../lib/api';
 
 export function EditProfilePage() {
   const navigate = useNavigate();
@@ -38,38 +39,27 @@ export function EditProfilePage() {
 
     setIsSaving(true);
 
-    // Update user in localStorage
-    const usersJson = localStorage.getItem('users');
-    const users = usersJson ? JSON.parse(usersJson) : [];
-    const updatedUsers = users.map((u: any) => {
-      if (u.email === user?.email) {
-        return {
-          ...u,
-          name: name.trim(),
-          phoneNumber: phone.trim(),
-          address: address.trim(),
-        };
-      }
-      return u;
-    });
+    try {
+      const result = await updateProfile({
+        name: name.trim(),
+        phoneNumber: phone.trim(),
+        address: address.trim(),
+      });
 
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
+      updateUser({
+        ...user!,
+        name: result.name,
+        phoneNumber: result.phoneNumber,
+        address: result.address,
+      });
 
-    // Update auth context
-    const updatedUser = {
-      ...user!,
-      name: name.trim(),
-      phoneNumber: phone.trim(),
-      address: address.trim(),
-    };
-    updateUser(updatedUser);
-
-    setIsSaving(false);
-    toast.success('Profile updated successfully!');
-
-    setTimeout(() => {
+      toast.success('Profile updated successfully!');
       navigate(`/profile/${user?.email}`);
-    }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update profile');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!user) {

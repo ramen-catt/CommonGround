@@ -4,6 +4,7 @@ import { ArrowLeft, Clock, Package, DollarSign, MapPin } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
 import { SiteLogo } from '../components/SiteLogo';
+import { getTransactions } from '../lib/api';
 
 interface Transaction {
   id: string;
@@ -36,18 +37,16 @@ export function PendingTransactionsPage() {
       return;
     }
 
-    // Load pending transactions (where user is buyer OR seller)
-    const transactionsJson = localStorage.getItem('transactions');
-    if (transactionsJson) {
-      const allTransactions = JSON.parse(transactionsJson);
-      const pending = allTransactions.filter(
-        (t: Transaction) =>
-          (t.userId === user.id || t.sellerEmail === user.email) &&
-          t.status !== 'completed' &&
-          t.status !== 'cancelled'
-      );
-      setTransactions(pending);
-    }
+    getTransactions()
+      .then((allTransactions) => {
+        const pending = allTransactions.filter(
+          (t: Transaction) =>
+            t.status !== 'Completed' &&
+            t.status !== 'Cancelled'
+        );
+        setTransactions(pending);
+      })
+      .catch(() => setTransactions([]));
   }, [user, navigate]);
 
   const getStatusBadge = (transaction: Transaction) => {
