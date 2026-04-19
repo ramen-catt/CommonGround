@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { UserProfile } from '../types';
+import { login, register, logout, getMe } from '../lib/api';
 
 export interface User {
   id: string;
@@ -12,6 +12,7 @@ export interface User {
   location?: string;
   phoneNumber?: string;
   address?: string;
+  isAdmin?: boolean;
   bannedFromListing?: boolean;
   bannedFromPurchasing?: boolean;
 }
@@ -23,82 +24,90 @@ interface AuthContextType {
   signOut: () => void;
   updateUser: (updatedUser: User) => void;
   isAuthenticated: boolean;
+  isAuthLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   useEffect(() => {
-    // Check for stored user session
-    const storedUser = localStorage.getItem('currentUser');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    // check if the user already has a session when the page loads
+    getMe()
+      .then((data) => {
+        setUser({
+          id:                   String(data.id),
+          name:                 data.name,
+          email:                data.email,
+          isAdmin:              data.isAdmin,
+          address:              data.address,
+          bannedFromListing:    (data as any).bannedFromListing ?? false,
+          bannedFromPurchasing: (data as any).bannedFromPurchasing ?? false,
+          joinDate:             '',
+          rating:               5.0,
+          totalReviews:         0,
+          location:             'Houston, TX',
+        });
+      })
+      .catch(() => { /* not logged in, thats fine */ })
+      .finally(() => setIsAuthLoading(false));
   }, []);
 
-  const signUp = async (name: string, email: string, password: string, phoneNumber: string, address: string): Promise<boolean> => {
-    // Get existing users
-    const usersJson = localStorage.getItem('users');
-    const users = usersJson ? JSON.parse(usersJson) : [];
-
-    // Check if email already exists
-    if (users.some((u: any) => u.email === email)) {
+  const signIn = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const data = await login(email, password);
+      setUser({
+        id:                   String(data.id),
+        name:                 data.name,
+        email:                data.email,
+        isAdmin:              data.isAdmin,
+        address:              data.address,
+        bannedFromListing:    (data as any).bannedFromListing ?? false,
+        bannedFromPurchasing: (data as any).bannedFromPurchasing ?? false,
+        joinDate:             '',
+        rating:               5.0,
+        totalReviews:         0,
+        location:             'Houston, TX',
+      });
+      return true;
+    } catch {
       return false;
     }
+  };
 
-    // Create new user
-    const newUser: User & { password: string } = {
-      id: Date.now().toString(),
-      email,
-      name,
-      joinDate: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-      rating: 5.0, // Default rating for new users
-      totalReviews: 0,
-      bio: '',
-      location: 'Houston, TX',
-      phoneNumber,
-      address,
-      password, // In production, this would be hashed
-    };
-
-    // Store user
-    users.push(newUser);
-    localStorage.setItem('users', JSON.stringify(users));
-
-    // Set current user (without password)
-    const { password: _, ...userWithoutPassword } = newUser;
-    setUser(userWithoutPassword);
-    localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
-
+  const signUp = async (
+    name: string,
+    email: string,
+    password: string,
+    phoneNumber: string,
+    address: string
+  ): Promise<boolean> => {
+    const data = await register({ name, email, password, phoneNumber, address });
+    setUser({
+      id:                   String(data.id),
+      name:                 data.name,
+      email:                data.email,
+      isAdmin:              data.isAdmin,
+      address:              data.address,
+      bannedFromListing:    (data as any).bannedFromListing ?? false,
+      bannedFromPurchasing: (data as any).bannedFromPurchasing ?? false,
+      joinDate:             new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
+      rating:               5.0,
+      totalReviews:         0,
+      location:             'Houston, TX',
+    });
     return true;
   };
 
-  const signIn = async (email: string, password: string): Promise<boolean> => {
-    const usersJson = localStorage.getItem('users');
-    const users = usersJson ? JSON.parse(usersJson) : [];
-
-    const foundUser = users.find((u: any) => u.email === email && u.password === password);
-
-    if (foundUser) {
-      const { password: _, ...userWithoutPassword } = foundUser;
-      setUser(userWithoutPassword);
-      localStorage.setItem('currentUser', JSON.stringify(userWithoutPassword));
-      return true;
-    }
-
-    return false;
-  };
-
-  const signOut = () => {
+  const signOut = async () => {
+    try { await logout(); } catch { /* ignore */ }
     setUser(null);
-    localStorage.removeItem('currentUser');
   };
 
   const updateUser = (updatedUser: User) => {
     setUser(updatedUser);
-    localStorage.setItem('currentUser', JSON.stringify(updatedUser));
   };
 
   return (
@@ -110,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signOut,
         updateUser,
         isAuthenticated: !!user,
+        isAuthLoading,
       }}
     >
       {children}

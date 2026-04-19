@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/ui/input';
@@ -8,12 +8,12 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { Listing } from '../types';
 import { SiteLogo } from '../components/SiteLogo';
+import { createListing, getListingOptions } from '../lib/api';
 
 export function CreateListingPage() {
   const navigate = useNavigate();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAuthLoading } = useAuth();
 
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
@@ -21,16 +21,62 @@ export function CreateListingPage() {
   const [condition, setCondition] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [conditionOptions, setConditionOptions] = useState<string[]>([]);
+  const [optionsError, setOptionsError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  useEffect(() => {
+    getListingOptions()
+      .then((options) => {
+        setCategoryOptions(options.categories);
+        setConditionOptions(options.conditions);
+        setOptionsError('');
+      })
+      .catch((err) => {
+        setCategoryOptions([]);
+        setConditionOptions([]);
+        setOptionsError(err.message || 'Could not load listing options from the backend.');
+      });
+  }, []);
+
+  const handleImageFileChange = (file?: File) => {
+    if (!file) {
+      setImageDataUrl('');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Please choose an image smaller than 2 MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => setImageDataUrl(String(reader.result || ''));
+    reader.onerror = () => toast.error('Could not read that image file');
+    reader.readAsDataURL(file);
+  };
+
   // Redirect if not authenticated
+  if (isAuthLoading) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <p>Loading...</p>
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     navigate('/auth');
     return null;
   }
 
   // Prevent admin and banned users from creating listings
-  if (user?.email === 'admin@email.com') {
+  if (user?.isAdmin) {
     navigate('/');
     toast.error('Admin accounts cannot create listings');
     return null;
@@ -58,34 +104,28 @@ export function CreateListingPage() {
 
     setIsSubmitting(true);
 
-    // Create new listing
-    const newListing: Listing = {
-      id: Date.now(),
-      title,
-      price: priceNum,
-      location: 'Houston, TX', // Default location for all listings
-      category,
-      condition: condition as 'New' | 'Like New' | 'Good' | 'Fair',
-      description,
-      image: imageUrl || 'https://images.unsplash.com/photo-1612015900986-4c4d017d1648?w=400',
-      images: [imageUrl || 'https://images.unsplash.com/photo-1612015900986-4c4d017d1648?w=800'],
-      listerName: user!.name,
-      listerEmail: user!.email,
-      listerJoinDate: user!.joinDate,
-      postedDate: new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }),
-    };
+    try {
+      const result = await createListing({
+        clientId:    parseInt(user!.id),
+        title,
+        price:       priceNum,
+        category,
+        condition,
+        description,
+        imageUrl: imageDataUrl || imageUrl,
+      });
 
-    // Get existing listings from localStorage
-    const existingListingsJson = localStorage.getItem('userListings');
-    const existingListings = existingListingsJson ? JSON.parse(existingListingsJson) : [];
-
-    // Add new listing
-    existingListings.push(newListing);
-    localStorage.setItem('userListings', JSON.stringify(existingListings));
-
-    setIsSubmitting(false);
-    toast.success('Listing created successfully!');
-    navigate('/');
+      if (result.success) {
+        toast.success('Listing created!');
+        navigate('/');
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Something went wrong');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -161,10 +201,9 @@ export function CreateListingPage() {
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="New">New</SelectItem>
-                    <SelectItem value="Like New">Like New</SelectItem>
-                    <SelectItem value="Good">Good</SelectItem>
-                    <SelectItem value="Fair">Fair</SelectItem>
+                    {conditionOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -178,25 +217,50 @@ export function CreateListingPage() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Furniture">Furniture</SelectItem>
-                    <SelectItem value="Electronics">Electronics</SelectItem>
-                    <SelectItem value="Home Decor">Home Decor</SelectItem>
-                    <SelectItem value="Office Equipment">Office Equipment</SelectItem>
+                    {categoryOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
+            {optionsError && (
+              <p className="text-sm text-red-600">
+                Listing options did not load from the Java backend: {optionsError}
+              </p>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="imageUrl">Image URL (optional)</Label>
+              <Label htmlFor="imageFile">Upload Image (optional)</Label>
+              <Input
+                id="imageFile"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageFileChange(e.target.files?.[0])}
+              />
+              {imageDataUrl && (
+                <img
+                  src={imageDataUrl}
+                  alt="Selected listing preview"
+                  className="h-32 w-32 rounded-lg object-cover border border-gray-200"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imageUrl">Or Image URL (optional)</Label>
               <Input
                 id="imageUrl"
                 type="url"
                 placeholder="https://example.com/image.jpg"
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
+                disabled={!!imageDataUrl}
               />
-              <p className="text-sm text-gray-500">Leave blank to use a default image</p>
+              <p className="text-sm text-gray-500">
+                Choose a file from your computer, or paste an image URL. Leave both blank to use a default image.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -215,7 +279,7 @@ export function CreateListingPage() {
               <Button 
                 type="submit" 
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                disabled={isSubmitting}
+                disabled={isSubmitting || categoryOptions.length === 0 || conditionOptions.length === 0}
               >
                 {isSubmitting ? 'Creating Listing...' : 'Create Listing'}
               </Button>

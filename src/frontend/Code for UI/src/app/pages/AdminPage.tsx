@@ -1,10 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router';
-import { ArrowLeft, Users, Flag, Package, Trash2, Shield, Star, Ban, CheckCircle } from 'lucide-react';
+import { Users, Flag, Package, Trash2, Shield, Ban, CheckCircle, Clock } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
-import { listings as defaultListings } from '../data/listings';
 import { Listing } from '../types';
 import {
   AlertDialog,
@@ -18,142 +17,178 @@ import {
 } from '../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { SiteLogo } from '../components/SiteLogo';
+import {
+  adminGetReports,
+  adminGetTransactions,
+  adminGetUsers,
+  adminRemoveListing,
+  adminRemoveReview,
+  adminSuspendUser,
+  adminUnsuspendUser,
+  getListings,
+} from '../lib/api';
+
+interface AdminUser {
+  id: number;
+  name: string;
+  email: string;
+  isAdmin: boolean;
+  isSuspended: boolean;
+}
+
+interface AdminReport {
+  id: number;
+  buyerId: number;
+  sellerId: number;
+  listingId: number;
+  ratingDescription: string;
+  reportDescription: string;
+  createdAt: string;
+}
+
+interface AdminTransaction {
+  id: number;
+  buyerId: number;
+  sellerId: number;
+  listingId: number;
+  status: string;
+  createdAt: string;
+}
+
+function mapAdminUser(row: any[]): AdminUser {
+  return {
+    id: Number(row[0]),
+    name: row[1] || `User #${row[0]}`,
+    email: row[2] || '',
+    isAdmin: row[3] === true || row[3] === 'true',
+    isSuspended: row[4] === true || row[4] === 'true',
+  };
+}
+
+function mapAdminReport(row: any[]): AdminReport {
+  return {
+    id: Number(row[0]),
+    buyerId: Number(row[1]),
+    sellerId: Number(row[2]),
+    listingId: Number(row[3]),
+    ratingDescription: row[4] || '',
+    reportDescription: row[5] || '',
+    createdAt: row[6] || '',
+  };
+}
+
+function mapAdminTransaction(row: any[]): AdminTransaction {
+  return {
+    id: Number(row[0]),
+    buyerId: Number(row[1]),
+    sellerId: Number(row[2]),
+    listingId: Number(row[3]),
+    status: row[4] || '',
+    createdAt: row[5] || '',
+  };
+}
 
 export function AdminPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const [users, setUsers] = useState<any[]>([]);
-  const [reports, setReports] = useState<any[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
-  const [userListings, setUserListings] = useState<Listing[]>([]);
-  const [deleteItemType, setDeleteItemType] = useState<'listing' | 'review' | 'report' | null>(null);
-  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [reports, setReports] = useState<AdminReport[]>([]);
+  const [transactions, setTransactions] = useState<AdminTransaction[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deleteItemType, setDeleteItemType] = useState<'listing' | 'report' | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<number | null>(null);
 
-  // Check if user is admin
   useEffect(() => {
-    if (!user || user.email !== 'admin@email.com') {
+    if (!user) return;
+    if (!user.isAdmin) {
       navigate('/');
     }
   }, [user, navigate]);
 
   useEffect(() => {
+    if (!user?.isAdmin) return;
     loadData();
-  }, []);
+  }, [user]);
 
-  const loadData = () => {
-    // Load users
-    const usersJson = localStorage.getItem('users');
-    if (usersJson) {
-      setUsers(JSON.parse(usersJson));
-    }
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [userRows, reportRows, transactionRows, listingRows] = await Promise.all([
+        adminGetUsers(),
+        adminGetReports(),
+        adminGetTransactions(),
+        getListings(),
+      ]);
 
-    // Load reports
-    const reportsJson = localStorage.getItem('reports');
-    if (reportsJson) {
-      setReports(JSON.parse(reportsJson));
-    }
-
-    // Load reviews
-    const reviewsJson = localStorage.getItem('reviews');
-    if (reviewsJson) {
-      setReviews(JSON.parse(reviewsJson));
-    }
-
-    // Load user listings
-    const listingsJson = localStorage.getItem('userListings');
-    if (listingsJson) {
-      setUserListings(JSON.parse(listingsJson));
+      setUsers(userRows.map(mapAdminUser));
+      setReports(reportRows.map(mapAdminReport));
+      setTransactions(transactionRows.map(mapAdminTransaction));
+      setListings(listingRows as Listing[]);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not load admin data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const allListings = useMemo(() => {
-    return [...defaultListings, ...userListings];
-  }, [userListings]);
+  const handleToggleSuspend = async (target: AdminUser) => {
+    try {
+      const result = target.isSuspended
+        ? await adminUnsuspendUser(target.id)
+        : await adminSuspendUser(target.id);
 
-  const handleDeleteListing = (listingId: number) => {
-    const updatedListings = userListings.filter(l => l.id !== listingId);
-    localStorage.setItem('userListings', JSON.stringify(updatedListings));
-    setUserListings(updatedListings);
-    toast.success('Listing deleted');
-    setDeleteItemType(null);
-    setDeleteItemId(null);
-  };
-
-  const handleDeleteReview = (reviewId: string) => {
-    const updatedReviews = reviews.filter(r => r.id !== reviewId);
-    localStorage.setItem('reviews', JSON.stringify(updatedReviews));
-    setReviews(updatedReviews);
-
-    // Update user ratings
-    const deletedReview = reviews.find(r => r.id === reviewId);
-    if (deletedReview) {
-      const usersJson = localStorage.getItem('users');
-      const users = usersJson ? JSON.parse(usersJson) : [];
-
-      const remainingReviews = updatedReviews.filter(
-        (r: any) => r.reviewedUserEmail === deletedReview.reviewedUserEmail
-      );
-
-      const totalReviews = remainingReviews.length;
-      const newRating = totalReviews > 0
-        ? remainingReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / totalReviews
-        : 5.0;
-
-      const updatedUsers = users.map((u: any) => {
-        if (u.email === deletedReview.reviewedUserEmail) {
-          return { ...u, rating: newRating, totalReviews };
-        }
-        return u;
-      });
-
-      localStorage.setItem('users', JSON.stringify(updatedUsers));
-    }
-
-    toast.success('Review deleted');
-    setDeleteItemType(null);
-    setDeleteItemId(null);
-  };
-
-  const handleDismissReport = (reportId: string) => {
-    const updatedReports = reports.filter(r => r.id !== reportId);
-    localStorage.setItem('reports', JSON.stringify(updatedReports));
-    setReports(updatedReports);
-    toast.success('Report dismissed');
-    setDeleteItemType(null);
-    setDeleteItemId(null);
-  };
-
-  const handleToggleBanListing = (userEmail: string) => {
-    const updatedUsers = users.map(u => {
-      if (u.email === userEmail) {
-        return { ...u, bannedFromListing: !u.bannedFromListing };
+      if (result.success) {
+        toast.success(result.message);
+        loadData();
+      } else {
+        toast.error(result.message);
       }
-      return u;
-    });
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-
-    const user = updatedUsers.find(u => u.email === userEmail);
-    toast.success(user?.bannedFromListing ? 'User banned from listing' : 'User unbanned from listing');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not update user');
+    }
   };
 
-  const handleToggleBanPurchasing = (userEmail: string) => {
-    const updatedUsers = users.map(u => {
-      if (u.email === userEmail) {
-        return { ...u, bannedFromPurchasing: !u.bannedFromPurchasing };
+  const handleDeleteListing = async (listingId: number) => {
+    try {
+      const result = await adminRemoveListing(listingId);
+      if (result.success) {
+        toast.success(result.message);
+        loadData();
+      } else {
+        toast.error(result.message);
       }
-      return u;
-    });
-    localStorage.setItem('users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-
-    const user = updatedUsers.find(u => u.email === userEmail);
-    toast.success(user?.bannedFromPurchasing ? 'User banned from purchasing' : 'User unbanned from purchasing');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not remove listing');
+    } finally {
+      setDeleteItemType(null);
+      setDeleteItemId(null);
+    }
   };
+
+  const handleDeleteReport = async (reportId: number) => {
+    try {
+      const result = await adminRemoveReview(reportId);
+      if (result.success) {
+        toast.success(result.message);
+        loadData();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Could not remove report');
+    } finally {
+      setDeleteItemType(null);
+      setDeleteItemId(null);
+    }
+  };
+
+  if (!user?.isAdmin) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-red-50">
-      {/* Background Pattern */}
       <div className="fixed inset-0 pointer-events-none opacity-5 z-0">
         <div className="absolute top-40 left-1/4 w-24 h-24 bg-black rounded-full"></div>
         <div className="absolute top-96 right-1/3 w-18 h-18 bg-black rounded-full"></div>
@@ -162,7 +197,6 @@ export function AdminPage() {
         <div className="absolute bottom-40 left-1/3 w-18 h-18 bg-black rounded-full"></div>
       </div>
 
-      {/* Header */}
       <header className="bg-red-600 shadow-md sticky top-0 z-10 relative">
         <div className="max-w-[1600px] mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
@@ -181,10 +215,14 @@ export function AdminPage() {
         </div>
       </header>
 
-      {/* Main Content */}
       <div className="max-w-[1400px] mx-auto px-6 py-8 relative z-1">
         <div className="bg-white rounded-lg shadow-md p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-6">Admin Dashboard</h2>
+          <div className="flex items-center justify-between gap-4 mb-6">
+            <h2 className="text-3xl font-bold text-gray-900">Admin Dashboard</h2>
+            <Button onClick={loadData} variant="outline" disabled={loading}>
+              {loading ? 'Loading...' : 'Refresh'}
+            </Button>
+          </div>
 
           <Tabs defaultValue="users" className="w-full">
             <TabsList className="grid w-full grid-cols-4">
@@ -198,96 +236,58 @@ export function AdminPage() {
               </TabsTrigger>
               <TabsTrigger value="listings">
                 <Package className="w-4 h-4 mr-2" />
-                Listings ({allListings.length})
+                Listings ({listings.length})
               </TabsTrigger>
-              <TabsTrigger value="reviews">
-                <Star className="w-4 h-4 mr-2" />
-                Reviews ({reviews.length})
+              <TabsTrigger value="transactions">
+                <Clock className="w-4 h-4 mr-2" />
+                Transactions ({transactions.length})
               </TabsTrigger>
             </TabsList>
 
-            {/* Users Tab */}
             <TabsContent value="users" className="mt-6">
               <div className="space-y-4">
-                {users.filter(u => u.email !== 'admin@email.com').map((user) => (
-                  <div key={user.id} className="border border-gray-200 rounded-lg p-4">
+                {users.filter((account) => !account.isAdmin).map((account) => (
+                  <div key={account.id} className="border border-gray-200 rounded-lg p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-semibold text-gray-900">{user.name}</h3>
-                          {user.bannedFromListing && (
+                          <h3 className="font-semibold text-gray-900">{account.name}</h3>
+                          {account.isSuspended && (
                             <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded">
-                              Banned from Listing
-                            </span>
-                          )}
-                          {user.bannedFromPurchasing && (
-                            <span className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded">
-                              Banned from Purchasing
+                              Suspended
                             </span>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600">{user.email}</p>
-                        <p className="text-sm text-gray-500 mt-1">
-                          Member since: {user.joinDate}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Rating: {user.rating?.toFixed(1) || '5.0'} ({user.totalReviews || 0} reviews)
-                        </p>
-                        {user.phoneNumber && (
-                          <p className="text-sm text-gray-500">Phone: {user.phoneNumber}</p>
-                        )}
-                        {user.address && (
-                          <p className="text-sm text-gray-500">Address: {user.address}</p>
-                        )}
-                        <p className="text-sm text-gray-500 mt-2">
-                          {reports.filter(r => r.reportedUserEmail === user.email).length} reports
-                        </p>
+                        <p className="text-sm text-gray-600">{account.email}</p>
+                        <p className="text-sm text-gray-500 mt-1">Account ID: {account.id}</p>
                       </div>
-                      <div className="flex flex-col gap-2">
-                        <Button
-                          size="sm"
-                          variant={user.bannedFromListing ? "default" : "outline"}
-                          onClick={() => handleToggleBanListing(user.email)}
-                          className={user.bannedFromListing ? "bg-green-600 hover:bg-green-700" : "border-red-600 text-red-600 hover:bg-red-50"}
-                        >
-                          {user.bannedFromListing ? (
-                            <>
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Unban Listing
-                            </>
-                          ) : (
-                            <>
-                              <Ban className="w-4 h-4 mr-1" />
-                              Ban Listing
-                            </>
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={user.bannedFromPurchasing ? "default" : "outline"}
-                          onClick={() => handleToggleBanPurchasing(user.email)}
-                          className={user.bannedFromPurchasing ? "bg-green-600 hover:bg-green-700" : "border-orange-600 text-orange-600 hover:bg-orange-50"}
-                        >
-                          {user.bannedFromPurchasing ? (
-                            <>
-                              <CheckCircle className="w-4 h-4 mr-1" />
-                              Unban Purchase
-                            </>
-                          ) : (
-                            <>
-                              <Ban className="w-4 h-4 mr-1" />
-                              Ban Purchase
-                            </>
-                          )}
-                        </Button>
-                      </div>
+                      <Button
+                        size="sm"
+                        variant={account.isSuspended ? 'default' : 'outline'}
+                        onClick={() => handleToggleSuspend(account)}
+                        className={account.isSuspended ? 'bg-green-600 hover:bg-green-700' : 'border-red-600 text-red-600 hover:bg-red-50'}
+                      >
+                        {account.isSuspended ? (
+                          <>
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Unsuspend
+                          </>
+                        ) : (
+                          <>
+                            <Ban className="w-4 h-4 mr-1" />
+                            Suspend
+                          </>
+                        )}
+                      </Button>
                     </div>
                   </div>
                 ))}
+                {!loading && users.filter((account) => !account.isAdmin).length === 0 && (
+                  <p className="text-center text-gray-500 py-8">No non-admin users found</p>
+                )}
               </div>
             </TabsContent>
 
-            {/* Reports Tab */}
             <TabsContent value="reports" className="mt-6">
               <div className="space-y-4">
                 {reports.length === 0 ? (
@@ -295,24 +295,16 @@ export function AdminPage() {
                 ) : (
                   reports.map((report) => (
                     <div key={report.id} className="border border-red-200 bg-red-50 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-3">
+                      <div className="flex items-start justify-between gap-4 mb-3">
                         <div className="flex-1">
                           <h3 className="font-semibold text-gray-900">
-                            Report against: {report.reportedUserEmail}
+                            Report #{report.id} for listing #{report.listingId}
                           </h3>
                           <p className="text-sm text-gray-600">
-                            Reported by: {report.reporterEmail}
+                            Buyer #{report.buyerId} reported seller #{report.sellerId}
                           </p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(report.timestamp).toLocaleString()}
-                          </p>
+                          <p className="text-sm text-gray-500">{report.createdAt}</p>
                         </div>
-                      </div>
-                      <div className="bg-white rounded p-3 mb-3">
-                        <p className="text-sm font-medium text-gray-700">Reason: {report.reason}</p>
-                        <p className="text-sm text-gray-600 mt-1">{report.description}</p>
-                      </div>
-                      <div className="flex gap-2">
                         <Button
                           onClick={() => {
                             setDeleteItemType('report');
@@ -320,9 +312,15 @@ export function AdminPage() {
                           }}
                           variant="outline"
                           size="sm"
+                          className="border-red-600 text-red-600"
                         >
-                          Dismiss Report
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Remove
                         </Button>
+                      </div>
+                      <div className="bg-white rounded p-3">
+                        <p className="text-sm font-medium text-gray-700">{report.ratingDescription || 'No rating description'}</p>
+                        <p className="text-sm text-gray-600 mt-1">{report.reportDescription || 'No report description'}</p>
                       </div>
                     </div>
                   ))
@@ -330,10 +328,9 @@ export function AdminPage() {
               </div>
             </TabsContent>
 
-            {/* Listings Tab */}
             <TabsContent value="listings" className="mt-6">
               <div className="space-y-4">
-                {allListings.map((listing) => (
+                {listings.map((listing) => (
                   <div key={listing.id} className="border border-gray-200 rounded-lg p-4 flex gap-4">
                     <img
                       src={listing.image}
@@ -343,91 +340,63 @@ export function AdminPage() {
                     <div className="flex-1">
                       <h3 className="font-semibold text-gray-900">{listing.title}</h3>
                       <p className="text-sm text-gray-600">${listing.price}</p>
+                      <p className="text-sm text-gray-500">Category: {listing.category}</p>
                       <p className="text-sm text-gray-500">
                         Posted by: {listing.listerName} ({listing.listerEmail})
                       </p>
                       <p className="text-sm text-gray-500">{listing.postedDate}</p>
                     </div>
-                    {userListings.some(l => l.id === listing.id) && (
-                      <Button
-                        onClick={() => {
-                          setDeleteItemType('listing');
-                          setDeleteItemId(listing.id.toString());
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="border-red-600 text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Delete
-                      </Button>
-                    )}
+                    <Button
+                      onClick={() => {
+                        setDeleteItemType('listing');
+                        setDeleteItemId(listing.id);
+                      }}
+                      variant="outline"
+                      size="sm"
+                      className="border-red-600 text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4 mr-1" />
+                      Remove
+                    </Button>
                   </div>
                 ))}
+                {!loading && listings.length === 0 && (
+                  <p className="text-center text-gray-500 py-8">No available listings found</p>
+                )}
               </div>
             </TabsContent>
 
-            {/* Reviews Tab */}
-            <TabsContent value="reviews" className="mt-6">
+            <TabsContent value="transactions" className="mt-6">
               <div className="space-y-4">
-                {reviews.map((review) => (
-                  <div key={review.id} className="border border-gray-200 rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">
-                          Review for: {review.reviewedUserEmail}
-                        </h3>
-                        <p className="text-sm text-gray-600">By: {review.reviewerName}</p>
-                        <div className="flex items-center gap-1 mt-1">
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <Star
-                              key={star}
-                              className={`w-4 h-4 ${
-                                star <= review.rating
-                                  ? 'fill-yellow-400 text-yellow-400'
-                                  : 'text-gray-300'
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <Button
-                        onClick={() => {
-                          setDeleteItemType('review');
-                          setDeleteItemId(review.id);
-                        }}
-                        variant="outline"
-                        size="sm"
-                        className="border-red-600 text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4 mr-1" />
-                        Delete
-                      </Button>
+                {transactions.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">No transactions found</p>
+                ) : (
+                  transactions.map((transaction) => (
+                    <div key={transaction.id} className="border border-gray-200 rounded-lg p-4">
+                      <h3 className="font-semibold text-gray-900">Transaction #{transaction.id}</h3>
+                      <p className="text-sm text-gray-600">Listing #{transaction.listingId}</p>
+                      <p className="text-sm text-gray-500">Buyer #{transaction.buyerId} and seller #{transaction.sellerId}</p>
+                      <p className="text-sm text-gray-500">Status: {transaction.status}</p>
+                      <p className="text-sm text-gray-500">{transaction.createdAt}</p>
                     </div>
-                    <p className="text-sm text-gray-600">{review.comment}</p>
-                    <p className="text-xs text-gray-500 mt-2">{review.date}</p>
-                    {review.listingTitle && (
-                      <p className="text-xs text-gray-500">Listing: {review.listingTitle}</p>
-                    )}
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </TabsContent>
           </Tabs>
         </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
       <AlertDialog open={!!deleteItemType} onOpenChange={() => { setDeleteItemType(null); setDeleteItemId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {deleteItemType === 'report' ? 'Dismiss Report' : `Delete ${deleteItemType}`}
+              {deleteItemType === 'report' ? 'Remove Report' : 'Remove Listing'}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {deleteItemType === 'report'
-                ? 'Are you sure you want to dismiss this report? This action cannot be undone.'
-                : `Are you sure you want to delete this ${deleteItemType}? This action cannot be undone.`}
+                ? 'This removes the feedback/report record from the database.'
+                : 'This marks the listing as Removed in the database.'}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -435,16 +404,14 @@ export function AdminPage() {
             <AlertDialogAction
               onClick={() => {
                 if (deleteItemType === 'listing' && deleteItemId) {
-                  handleDeleteListing(Number(deleteItemId));
-                } else if (deleteItemType === 'review' && deleteItemId) {
-                  handleDeleteReview(deleteItemId);
+                  handleDeleteListing(deleteItemId);
                 } else if (deleteItemType === 'report' && deleteItemId) {
-                  handleDismissReport(deleteItemId);
+                  handleDeleteReport(deleteItemId);
                 }
               }}
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleteItemType === 'report' ? 'Dismiss' : 'Delete'}
+              Remove
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

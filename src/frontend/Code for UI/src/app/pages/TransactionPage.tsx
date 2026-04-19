@@ -7,31 +7,34 @@ import { Label } from '../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
-import { meetupLocations } from '../data/meetupLocations';
 import { SiteLogo } from '../components/SiteLogo';
+import { createTransaction, getLocations, getSuggestedMeetupLocation } from '../lib/api';
 
 export function TransactionPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
 
-  const { sellerName, sellerEmail, listingTitle, conversationId } = location.state || {};
+  const { sellerName, listingTitle, listingId, sellerId } = location.state || {};
   
   const [agreedPrice, setAgreedPrice] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentHandle, setPaymentHandle] = useState('');
   const [meetupLocation, setMeetupLocation] = useState('');
+  const [meetupLocations, setMeetupLocations] = useState<any[]>([]);
+  const [meetupSuggestion, setMeetupSuggestion] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const selectedMeetupLocation = meetupLocations.find(loc => loc.id === meetupLocation);
 
   useEffect(() => {
     // Redirect if not authenticated or no state
-    if (!user || !sellerName) {
+    if (!user || !sellerName || !listingId || !sellerId) {
       navigate('/');
       return;
     }
 
     // Prevent admin and banned users from purchasing
-    if (user.email === 'admin@email.com') {
+    if (user.isAdmin) {
       toast.error('Admin accounts cannot purchase items');
       navigate('/');
       return;
@@ -42,7 +45,26 @@ export function TransactionPage() {
       navigate('/');
       return;
     }
-  }, [user, sellerName, navigate]);
+  }, [user, sellerName, listingId, sellerId, navigate]);
+
+  useEffect(() => {
+    getLocations()
+      .then(setMeetupLocations)
+      .catch((err) => toast.error(err.message || 'Could not load meetup locations'));
+  }, []);
+
+  useEffect(() => {
+    if (!user || !sellerId) return;
+
+    getSuggestedMeetupLocation({ buyerId: Number(user.id), sellerId: Number(sellerId) })
+      .then((suggestion) => {
+        setMeetupSuggestion(suggestion);
+        if (suggestion.recommendedLocation?.id) {
+          setMeetupLocation(String(suggestion.recommendedLocation.id));
+        }
+      })
+      .catch((err) => console.error('could not load meetup suggestion', err));
+  }, [user, sellerId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,42 +82,28 @@ export function TransactionPage() {
 
     setIsProcessing(true);
 
-    // Simulate processing
-    setTimeout(() => {
-      const transaction = {
-        id: Date.now().toString(),
-        userId: user!.id,
-        buyerEmail: user!.email,
-        buyerName: user!.name,
-        sellerEmail,
-        sellerName,
-        listingTitle,
-        agreedPrice: price,
-        paymentMethod,
-        paymentHandle: paymentHandle || null,
-        meetupLocation: meetupLocations.find(loc => loc.id === meetupLocation),
-        timestamp: new Date().toISOString(),
-        status: 'pending_meetup', // Waiting for both parties to confirm meetup
-        buyerConfirmed: false,
-        sellerConfirmed: false,
-      };
-
-      const transactionsJson = localStorage.getItem('transactions');
-      const transactions = transactionsJson ? JSON.parse(transactionsJson) : [];
-      transactions.push(transaction);
-      localStorage.setItem('transactions', JSON.stringify(transactions));
-
-      setIsProcessing(false);
+    try {
+      const result = await createTransaction({
+        listingId: Number(listingId),
+        sellerId: Number(sellerId),
+        meetupAddress: selectedMeetupLocation?.address || selectedMeetupLocation?.name || '',
+      });
       toast.success('Transaction initiated!');
-      
-      // Navigate to the confirmation page
       navigate('/transaction-confirm', {
         state: {
-          transactionId: transaction.id,
-          ...transaction,
+          transactionId: result.id,
+          ...result.transaction,
+          agreedPrice: price,
+          paymentMethod,
+          paymentHandle: paymentHandle || null,
+          meetupLocation: selectedMeetupLocation,
         }
       });
-    }, 1000);
+    } catch (err: any) {
+      toast.error(err.message || 'Could not create transaction');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const getPaymentMethodLabel = (method: string) => {
@@ -165,6 +173,18 @@ export function TransactionPage() {
                 <span className="text-gray-600">Seller:</span>
                 <span className="font-medium text-gray-900">{sellerName}</span>
               </div>
+              {meetupSuggestion?.buyer?.address && (
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="text-gray-600">Your address:</span>
+                  <span className="font-medium text-gray-900 text-right">{meetupSuggestion.buyer.address}</span>
+                </div>
+              )}
+              {meetupSuggestion?.seller?.address && (
+                <div className="flex justify-between gap-4 text-sm">
+                  <span className="text-gray-600">Seller address:</span>
+                  <span className="font-medium text-gray-900 text-right">{meetupSuggestion.seller.address}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -241,16 +261,22 @@ export function TransactionPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {meetupLocation && (
+              {selectedMeetupLocation && (
                 <p className="text-xs text-gray-600 mt-2">
-                  {meetupLocations.find(loc => loc.id === meetupLocation)?.address}
+                  {selectedMeetupLocation.address}
                 </p>
               )}
               <p className="text-xs text-gray-500">
                 Choose from our vetted safe meetup locations in Houston
               </p>
+              {meetupSuggestion?.recommendedLocation && (
+                <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900">
+                  <strong>Suggested meetup:</strong> {meetupSuggestion.recommendedLocation.name}
+                  <div className="mt-1 text-xs">{meetupSuggestion.recommendedLocation.address}</div>
+                </div>
+              )}
 
-              {/* Map - Always visible */}
+              {/* Map */}
               <div className="mt-3 rounded-lg overflow-hidden border border-gray-200">
                 <iframe
                   width="100%"
@@ -258,7 +284,11 @@ export function TransactionPage() {
                   style={{ border: 0 }}
                   loading="lazy"
                   allowFullScreen
-                  src={`https://www.google.com/maps/embed/v1/place?key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8&q=Houston,TX&zoom=11`}
+                  src={
+                    selectedMeetupLocation
+                      ? `https://www.openstreetmap.org/export/embed.html?bbox=${selectedMeetupLocation.lng - 0.01}%2C${selectedMeetupLocation.lat - 0.01}%2C${selectedMeetupLocation.lng + 0.01}%2C${selectedMeetupLocation.lat + 0.01}&layer=mapnik&marker=${selectedMeetupLocation.lat}%2C${selectedMeetupLocation.lng}`
+                      : 'https://www.openstreetmap.org/export/embed.html?bbox=-95.70%2C29.55%2C-95.20%2C30.00&layer=mapnik'
+                  }
                 ></iframe>
               </div>
             </div>

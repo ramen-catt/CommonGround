@@ -4,7 +4,7 @@ export interface Listing {
   title: string;
   price: number;
   location: string;
-  condition: 'New' | 'Like New' | 'Good' | 'Fair';
+  condition: string;
   category: string;
   description: string;
   listerName: string;

@@ -1,14 +1,13 @@
-import { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
-import { ArrowLeft, Heart, MapPin, Calendar, User as UserIcon, MessageCircle, Star, Edit2, Trash2 } from 'lucide-react';
-import { listings } from '../data/listings';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router';
+import { ArrowLeft, Calendar, User as UserIcon, MessageCircle, Star, Edit2, Trash2, ExternalLink } from 'lucide-react';
 import { MessageDialog } from '../components/MessageDialog';
 import { Button } from '../components/ui/button';
 import { ImageWithFallback } from '../components/figma/ImageWithFallback';
-import { Listing } from '../types';
 import { useAuth } from '../context/AuthContext';
 import { SiteLogo } from '../components/SiteLogo';
 import { toast } from 'sonner';
+import { getListing, deleteListing } from '../lib/api';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -28,23 +27,16 @@ export function ListingDetailPage() {
   const [isMessageDialogOpen, setIsMessageDialogOpen] = useState(false);
   const [showLoginAlert, setShowLoginAlert] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [listing, setListing] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Combine default listings with user-created listings
-  const allListings = useMemo(() => {
-    const userListingsJson = localStorage.getItem('userListings');
-    const userListings: Listing[] = userListingsJson ? JSON.parse(userListingsJson) : [];
-    return [...listings, ...userListings];
-  }, []);
-
-  const listing = allListings.find((l) => l.id === Number(id));
-
-  // Get lister profile info
-  const listerProfile = useMemo(() => {
-    if (!listing?.listerEmail) return null;
-    const usersJson = localStorage.getItem('users');
-    const users = usersJson ? JSON.parse(usersJson) : [];
-    return users.find((u: any) => u.email === listing.listerEmail);
-  }, [listing]);
+  useEffect(() => {
+    if (!id) return;
+    getListing(Number(id))
+      .then(setListing)
+      .catch(() => setListing(null))
+      .finally(() => setLoading(false));
+  }, [id]);
 
   const renderStars = (rating: number) => {
     return (
@@ -64,6 +56,10 @@ export function ListingDetailPage() {
     );
   };
 
+  if (loading) {
+    return <div className="min-h-screen bg-red-50 flex items-center justify-center"><p>Loading...</p></div>;
+  }
+
   if (!listing) {
     return (
       <div className="min-h-screen bg-red-50 flex items-center justify-center">
@@ -80,7 +76,7 @@ export function ListingDetailPage() {
   const handleMessageClick = () => {
     if (!user) {
       setShowLoginAlert(true);
-    } else if (user.email === 'admin@email.com') {
+    } else if (user.isAdmin) {
       toast.error('Admin accounts cannot message sellers');
     } else if (user.bannedFromPurchasing) {
       toast.error('Your account is restricted from purchasing');
@@ -89,15 +85,17 @@ export function ListingDetailPage() {
     }
   };
 
-  const handleDeleteListing = () => {
-    const userListingsJson = localStorage.getItem('userListings');
-    const userListings: Listing[] = userListingsJson ? JSON.parse(userListingsJson) : [];
-    const updatedListings = userListings.filter(l => l.id !== listing.id);
-    localStorage.setItem('userListings', JSON.stringify(updatedListings));
-    navigate('/');
+  const handleDeleteListing = async () => {
+    try {
+      await deleteListing(listing.id, parseInt(user!.id));
+      toast.success('Listing deleted');
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not delete listing');
+    }
   };
 
-  const isOwnListing = user?.email === listing?.listerEmail;
+  const isOwnListing = user && listing && String(listing.clientId) === user.id;
 
   return (
     <div className="min-h-screen bg-red-50">
@@ -156,13 +154,13 @@ export function ListingDetailPage() {
             <div className="space-y-4">
               <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
                 <ImageWithFallback
-                  src={listing.images[selectedImageIndex]}
+                  src={(listing.images?.[selectedImageIndex]) || listing.image || ''}
                   alt={listing.title}
                   className="w-full h-full object-cover"
                 />
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {listing.images.map((image, index) => (
+                {(listing.images || []).map((image: string, index: number) => (
                   <button
                     key={index}
                     onClick={() => setSelectedImageIndex(index)}
@@ -222,25 +220,11 @@ export function ListingDetailPage() {
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-gray-900">{listing.listerName}</p>
-                      {listerProfile && listerProfile.rating && renderStars(listerProfile.rating)}
                     </div>
-                    <p className="text-sm text-gray-500">Member since {listing.listerJoinDate}</p>
+                    <p className="text-sm text-gray-500">Member since {listing.listerJoinDate || 'N/A'}</p>
                   </div>
                 </div>
                 
-                {listing.listerEmail && (
-                  <Link 
-                    to={`/profile/${listing.listerEmail}`}
-                    className="block mb-3"
-                  >
-                    <Button
-                      variant="outline"
-                      className="w-full border-red-600 text-red-600 hover:bg-red-50"
-                    >
-                      View Profile
-                    </Button>
-                  </Link>
-                )}
 
                 {isOwnListing ? (
                   <div className="space-y-3">
@@ -262,7 +246,7 @@ export function ListingDetailPage() {
                       Delete Listing
                     </Button>
                   </div>
-                ) : user?.email === 'admin@email.com' ? (
+                ) : user?.isAdmin ? (
                   <div className="bg-gray-100 border border-gray-300 rounded-lg p-4 text-center">
                     <p className="text-gray-600 text-sm">Admin accounts cannot purchase items</p>
                   </div>
@@ -271,14 +255,25 @@ export function ListingDetailPage() {
                     <p className="text-red-700 text-sm font-semibold">Your account is restricted from purchasing</p>
                   </div>
                 ) : (
-                  <Button
-                    onClick={handleMessageClick}
-                    className="w-full bg-red-600 hover:bg-red-700"
-                    size="lg"
-                  >
-                    <MessageCircle className="w-5 h-5 mr-2" />
-                    Message Seller
-                  </Button>
+                  <div className="space-y-3">
+                    <Button
+                      onClick={() => navigate(`/profile/${listing.listerEmail}`)}
+                      variant="outline"
+                      className="w-full border-red-600 text-red-600 hover:bg-red-50"
+                      size="lg"
+                    >
+                      <ExternalLink className="w-5 h-5 mr-2" />
+                      View Profile
+                    </Button>
+                    <Button
+                      onClick={handleMessageClick}
+                      className="w-full bg-red-600 hover:bg-red-700"
+                      size="lg"
+                    >
+                      <MessageCircle className="w-5 h-5 mr-2" />
+                      Message Seller
+                    </Button>
+                  </div>
                 )}
               </div>
             </div>
@@ -289,9 +284,11 @@ export function ListingDetailPage() {
       <MessageDialog
         isOpen={isMessageDialogOpen}
         onClose={() => setIsMessageDialogOpen(false)}
-        listerName={listing.listerName}
+        listerName={listing.listerName || 'Seller'}
         listerEmail={listing.listerEmail || ''}
         listingTitle={listing.title}
+        sellerId={listing.clientId}
+        listingId={listing.id}
       />
 
       <AlertDialog open={showLoginAlert} onOpenChange={setShowLoginAlert}>

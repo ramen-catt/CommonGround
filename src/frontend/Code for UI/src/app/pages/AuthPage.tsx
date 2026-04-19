@@ -67,14 +67,18 @@ export function AuthPage() {
     }
     
     setIsSigningUp(true);
-    const success = await signUp(signUpName, signUpEmail, signUpPassword, signUpPhoneNumber, signUpAddress);
-    setIsSigningUp(false);
-
-    if (success) {
-      toast.success('Account created successfully!');
-      navigate('/');
-    } else {
-      toast.error('An account with this email already exists');
+    try {
+      const success = await signUp(signUpName, signUpEmail, signUpPassword, signUpPhoneNumber, signUpAddress);
+      if (success) {
+        toast.success('Account created successfully!');
+        navigate('/');
+      } else {
+        toast.error('Registration failed, try again');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Registration failed, try again');
+    } finally {
+      setIsSigningUp(false);
     }
   };
 

@@ -27,19 +27,29 @@
             <version>8.0.33</version>
         </dependency>
 
+        <!-- Gson - converts Java objects to JSON for the frontend -->
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.10.1</version>
+        </dependency>
+
+        <!-- BCrypt - for secure password hashing (spec §5.2) -->
+        <dependency>
+            <groupId>org.mindrot</groupId>
+            <artifactId>jbcrypt</artifactId>
+            <version>0.4</version>
+        </dependency>
+
     </dependencies>
 
     <build>
 
+        <!-- the WAR deploys as ROOT so URLs are just localhost:8080/api/... -->
+        <finalName>ROOT</finalName>
+
         <!-- tells Maven your Java files are in src/backend -->
         <sourceDirectory>src/backend</sourceDirectory>
-
-        <!-- tells Maven your HTML files are in src/frontend -->
-        <resources>
-            <resource>
-                <directory>src/frontend</directory>
-            </resource>
-        </resources>
 
         <plugins>
 
@@ -49,8 +59,18 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.11.0</version>
                 <configuration>
-                    <source>17</source>
-                    <target>17</target>
+                    <release>17</release>
+                    <!-- compile only the connected com.commonground backend; keep older prototype folders out of the WAR -->
+                    <excludes>
+                        <exclude>admin/**</exclude>
+                        <exclude>listing/**</exclude>
+                        <exclude>Client/**</exclude>
+                        <exclude>Guest/**</exclude>
+                        <exclude>Map/**</exclude>
+                        <exclude>Messagingservice_Store_notif/**</exclude>
+                        <exclude>transaction/**</exclude>
+                        <exclude>Feedback/**</exclude>
+                    </excludes>
                 </configuration>
             </plugin>
 
@@ -60,8 +80,19 @@
                 <artifactId>maven-war-plugin</artifactId>
                 <version>3.4.0</version>
                 <configuration>
-                    <!-- tells Maven your webapp folder is src/frontend -->
-                    <warSourceDirectory>src/frontend</warSourceDirectory>
+                    <!-- packages the built React app instead of raw frontend source -->
+                    <warSourceDirectory>src/frontend/Code for UI/dist</warSourceDirectory>
+                    <!-- ignore stale IDE-built classes from old package names -->
+                    <packagingExcludes>
+                        WEB-INF/classes/admin/**,
+                        WEB-INF/classes/Client/**,
+                        WEB-INF/classes/Feedback/**,
+                        WEB-INF/classes/Guest/**,
+                        WEB-INF/classes/listing/**,
+                        WEB-INF/classes/Map/**,
+                        WEB-INF/classes/Messagingservice_Store_notif/**,
+                        WEB-INF/classes/transaction/**
+                    </packagingExcludes>
                     <!-- stops Maven complaining if web.xml is missing -->
                     <failOnMissingWebXml>false</failOnMissingWebXml>
                 </configuration>

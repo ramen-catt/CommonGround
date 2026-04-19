@@ -12,6 +12,7 @@ import { Send } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router';
+import { sendMessage } from '../lib/api';
 
 interface MessageDialogProps {
   isOpen: boolean;
@@ -19,85 +20,35 @@ interface MessageDialogProps {
   listerName: string;
   listerEmail: string;
   listingTitle: string;
+  sellerId?: number;
+  listingId?: number;
 }
 
-interface Message {
-  id: string;
-  text: string;
-  senderEmail: string;
-  senderName: string;
-  timestamp: string;
-  readBy: string[];
-}
-
-interface Conversation {
-  id: string;
-  buyerEmail: string;
-  buyerName: string;
-  sellerEmail: string;
-  sellerName: string;
-  listingTitle: string;
-  messages: Message[];
-  lastMessageTime: string;
-}
-
-export function MessageDialog({ isOpen, onClose, listerName, listerEmail, listingTitle }: MessageDialogProps) {
+export function MessageDialog({ isOpen, onClose, listerName, listerEmail, listingTitle, sellerId, listingId }: MessageDialogProps) {
   const [message, setMessage] = useState('');
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (message.trim() && user) {
-      // Create conversation ID based on buyer email, seller email, and listing title
-      const conversationId = `${user.email}_${listerEmail}_${listingTitle}`.replace(/\s+/g, '_').replace(/@/g, '-');
-
-      // Load all conversations
-      const conversationsJson = localStorage.getItem('conversations');
-      const conversations: Conversation[] = conversationsJson ? JSON.parse(conversationsJson) : [];
-
-      // Find or create conversation
-      let conversation = conversations.find(c => c.id === conversationId);
-
-      const newMessage: Message = {
-        id: Date.now().toString(),
-        text: message,
-        senderEmail: user.email,
-        senderName: user.name,
-        timestamp: new Date().toLocaleTimeString('en-US', {
-          hour: 'numeric',
-          minute: '2-digit',
-          hour12: true
-        }),
-        readBy: [user.email],
-      };
-
-      if (conversation) {
-        // Add to existing conversation
-        conversation.messages.push(newMessage);
-        conversation.lastMessageTime = newMessage.timestamp;
-      } else {
-        // Create new conversation
-        conversation = {
-          id: conversationId,
-          buyerEmail: user.email,
-          buyerName: user.name,
-          sellerEmail: listerEmail,
-          sellerName: listerName,
-          listingTitle: listingTitle,
-          messages: [newMessage],
-          lastMessageTime: newMessage.timestamp,
-        };
-        conversations.push(conversation);
+      try {
+        await sendMessage({
+          receiverId: sellerId,
+          receiverEmail: sellerId ? undefined : listerEmail,
+          listingId,
+          text: message,
+        });
+        setMessage('');
+        onClose();
+        navigate('/', {
+          state: {
+            openChat: true,
+            conversationId: sellerId && listingId ? `${sellerId}:${listingId}` : sellerId ? `${sellerId}:general` : undefined,
+          },
+        });
+      } catch (err: any) {
+        toast.error(err.message || 'Could not send message');
       }
-
-      // Save all conversations
-      localStorage.setItem('conversations', JSON.stringify(conversations));
-
-      setMessage('');
-      onClose();
-
-      // Navigate to home page and trigger chat sidebar to open
-      navigate('/', { state: { openChat: true, conversationId } });
     }
   };
 

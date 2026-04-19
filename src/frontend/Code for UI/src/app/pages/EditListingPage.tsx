@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useAuth } from '../context/AuthContext';
 import { Input } from '../components/ui/input';
@@ -8,14 +8,13 @@ import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
-import { Listing } from '../types';
-import { listings } from '../data/listings';
 import { SiteLogo } from '../components/SiteLogo';
+import { getListing, editListing, getListingOptions } from '../lib/api';
 
 export function EditListingPage() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isAuthLoading } = useAuth();
 
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
@@ -23,24 +22,26 @@ export function EditListingPage() {
   const [condition, setCondition] = useState('');
   const [description, setDescription] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageDataUrl, setImageDataUrl] = useState('');
+  const [currentImageUrl, setCurrentImageUrl] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [listing, setListing] = useState<Listing | null>(null);
-
-  // Get listing
-  const allListings = useMemo(() => {
-    const userListingsJson = localStorage.getItem('userListings');
-    const userListings: Listing[] = userListingsJson ? JSON.parse(userListingsJson) : [];
-    return [...listings, ...userListings];
-  }, []);
+  const [loading, setLoading] = useState(true);
+  const [listingId, setListingId] = useState<number | null>(null);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [conditionOptions, setConditionOptions] = useState<string[]>([]);
+  const [optionsError, setOptionsError] = useState('');
 
   useEffect(() => {
+    if (isAuthLoading) {
+      return;
+    }
+
     if (!isAuthenticated) {
       navigate('/auth');
       return;
     }
 
-    // Prevent admin and banned users from editing listings
-    if (user?.email === 'admin@email.com') {
+    if (user?.isAdmin) {
       toast.error('Admin accounts cannot edit listings');
       navigate('/');
       return;
@@ -52,28 +53,63 @@ export function EditListingPage() {
       return;
     }
 
-    const foundListing = allListings.find((l) => l.id === Number(id));
-    if (!foundListing) {
-      toast.error('Listing not found');
-      navigate('/');
+    if (!id) return;
+
+    Promise.all([getListing(Number(id)), getListingOptions()])
+      .then(([data, options]) => {
+        setCategoryOptions(options.categories);
+        setConditionOptions(options.conditions);
+        setOptionsError('');
+
+        if (data.category && !options.categories.includes(data.category)) {
+          setCategoryOptions([...options.categories, data.category]);
+        }
+        if (data.condition && !options.conditions.includes(data.condition)) {
+          setConditionOptions([...options.conditions, data.condition]);
+        }
+
+        // make sure this user owns it
+        if (String(data.clientId) !== user?.id) {
+          toast.error('You can only edit your own listings');
+          navigate('/');
+          return;
+        }
+
+        setListingId(data.id);
+        setTitle(data.title || '');
+        setPrice(String(data.price || ''));
+        setCategory(data.category || '');
+        setCondition(data.condition || '');
+        setDescription(data.description || '');
+        setCurrentImageUrl(data.image || '');
+        setImageUrl('');
+      })
+      .catch((err) => {
+        setOptionsError(err.message || 'Could not load listing options from the backend.');
+        toast.error('Could not load this listing');
+      })
+      .finally(() => setLoading(false));
+  }, [id, isAuthenticated, isAuthLoading, user, navigate]);
+
+  const handleImageFileChange = (file?: File) => {
+    if (!file) {
+      setImageDataUrl('');
+      return;
+    }
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('Please choose an image smaller than 2 MB');
       return;
     }
 
-    // Check if user owns this listing
-    if (foundListing.listerEmail !== user?.email) {
-      toast.error('You can only edit your own listings');
-      navigate('/');
-      return;
-    }
-
-    setListing(foundListing);
-    setTitle(foundListing.title);
-    setPrice(foundListing.price.toString());
-    setCategory(foundListing.category);
-    setCondition(foundListing.condition);
-    setDescription(foundListing.description);
-    setImageUrl(foundListing.images[0] || '');
-  }, [id, isAuthenticated, user, navigate, allListings]);
+    const reader = new FileReader();
+    reader.onload = () => setImageDataUrl(String(reader.result || ''));
+    reader.onerror = () => toast.error('Could not read that image file');
+    reader.readAsDataURL(file);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,40 +127,35 @@ export function EditListingPage() {
 
     setIsSubmitting(true);
 
-    // Update listing
-    const updatedListing: Listing = {
-      ...listing!,
-      title,
-      price: priceNum,
-      location: listing!.location || 'Houston, TX', // Preserve location or set default
-      category,
-      condition: condition as 'New' | 'Like New' | 'Good' | 'Fair',
-      description,
-      image: imageUrl || listing!.image,
-      images: [imageUrl || listing!.images[0]],
-    };
+    try {
+      const result = await editListing({
+        id: listingId!,
+        clientId: parseInt(user!.id),
+        title,
+        price: priceNum,
+        category,
+        condition,
+        description,
+        imageUrl: imageDataUrl || imageUrl,
+      });
 
-    // Get existing user listings from localStorage
-    const userListingsJson = localStorage.getItem('userListings');
-    const userListings: Listing[] = userListingsJson ? JSON.parse(userListingsJson) : [];
-
-    // Update the listing
-    const updatedListings = userListings.map(l =>
-      l.id === listing!.id ? updatedListing : l
-    );
-    localStorage.setItem('userListings', JSON.stringify(updatedListings));
-
-    setIsSubmitting(false);
-    toast.success('Listing updated successfully!');
-    navigate(`/listing/${id}`);
+      if (result.success) {
+        toast.success('Listing updated!');
+        navigate(`/listing/${id}`);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Something went wrong');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  if (!listing) {
+  if (isAuthLoading || loading) {
     return (
       <div className="min-h-screen bg-red-50 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Loading...</h2>
-        </div>
+        <p>Loading...</p>
       </div>
     );
   }
@@ -202,10 +233,9 @@ export function EditListingPage() {
                     <SelectValue placeholder="Select condition" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="New">New</SelectItem>
-                    <SelectItem value="Like New">Like New</SelectItem>
-                    <SelectItem value="Good">Good</SelectItem>
-                    <SelectItem value="Fair">Fair</SelectItem>
+                    {conditionOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -219,25 +249,50 @@ export function EditListingPage() {
                     <SelectValue placeholder="Select category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Furniture">Furniture</SelectItem>
-                    <SelectItem value="Electronics">Electronics</SelectItem>
-                    <SelectItem value="Home Decor">Home Decor</SelectItem>
-                    <SelectItem value="Office Equipment">Office Equipment</SelectItem>
+                    {categoryOptions.map((option) => (
+                      <SelectItem key={option} value={option}>{option}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
             </div>
 
+            {optionsError && (
+              <p className="text-sm text-red-600">
+                Listing options did not load from the Java backend: {optionsError}
+              </p>
+            )}
+
             <div className="space-y-2">
-              <Label htmlFor="imageUrl">Image URL (optional)</Label>
+              <Label htmlFor="imageFile">Replace Image (optional)</Label>
+              <Input
+                id="imageFile"
+                type="file"
+                accept="image/*"
+                onChange={(e) => handleImageFileChange(e.target.files?.[0])}
+              />
+              {(imageDataUrl || imageUrl || currentImageUrl) && (
+                <img
+                  src={imageDataUrl || imageUrl || currentImageUrl}
+                  alt="Selected listing preview"
+                  className="h-32 w-32 rounded-lg object-cover border border-gray-200"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="imageUrl">Or Image URL</Label>
               <Input
                 id="imageUrl"
                 type="url"
                 placeholder="https://example.com/image.jpg"
                 value={imageUrl}
                 onChange={(e) => setImageUrl(e.target.value)}
+                disabled={!!imageDataUrl}
               />
-              <p className="text-sm text-gray-500">Leave blank to keep current image</p>
+              <p className="text-sm text-gray-500">
+                Leave this blank to keep the current image.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -256,7 +311,7 @@ export function EditListingPage() {
               <Button
                 type="submit"
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                disabled={isSubmitting}
+                disabled={isSubmitting || categoryOptions.length === 0 || conditionOptions.length === 0}
               >
                 {isSubmitting ? 'Updating Listing...' : 'Update Listing'}
               </Button>
