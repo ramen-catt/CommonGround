@@ -67,7 +67,7 @@ public class ListingAuditLogger {
                      "(listing_id, client_id, action, new_status) " +
                      "VALUES (?, ?, ?, ?)";
  
-        try (Connection conn = DriverManager.getConnection(DB_URL, DB_USER, DB_PASS);
+        try (Connection conn = com.commonground.util.DbUtil.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
  
             stmt.setInt   (1, listingId);
