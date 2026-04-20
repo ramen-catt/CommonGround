@@ -345,14 +345,14 @@ export function ProfilePage() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Account?</h2>
             <p className="text-gray-600 mb-6">
-              Are you sure? This will permanently delete your account, listings, messages, and reviews. This cannot be undone.
+              Are you sure? This will permanently delete your account, listings, messages, and reviews. You will not be able to log back in with this account.
             </p>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowDeleteAccountDialog(false)}>
                 Cancel
               </Button>
               <Button onClick={handleDeleteAccount} className="bg-red-600 hover:bg-red-700">
-                Sign Out & Delete
+                Delete Account
               </Button>
             </div>
           </div>

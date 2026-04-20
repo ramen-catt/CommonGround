@@ -151,21 +151,30 @@ public class AccountServlet extends HttpServlet {
                     conn.rollback();
                     return;
                 }
+
                 ensureDeletedAccountTable(conn);
                 rememberDeletedAccount(conn,
                         deletedAccount.get("email").getAsString(),
                         deletedAccount.get("username").getAsString());
                 markAccountDeleted(conn, accountId);
+
+                // Fully wipe this account and its data. The deleted_account row stays
+                // behind so the same email/username cannot log in or be recreated.
+                conn.prepareStatement("SET foreign_key_checks = 0").execute();
+                exec(conn, "DELETE FROM feedback WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
+                exec(conn, "DELETE FROM audit_trail WHERE client_id = ?", accountId);
+                exec(conn, "DELETE FROM transactions WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
+                exec(conn, "DELETE FROM message WHERE sender_id = ? OR receiver_id = ?", accountId, accountId);
+                exec(conn, "DELETE FROM listing_image WHERE listing_id IN (SELECT listing_id FROM listing WHERE client_id = ?)", accountId);
+                exec(conn, "DELETE FROM listing WHERE client_id = ?", accountId);
+                exec(conn, "DELETE FROM client WHERE account_id = ?", accountId);
+                exec(conn, "DELETE FROM account WHERE account_id = ?", accountId);
+                conn.prepareStatement("SET foreign_key_checks = 1").execute();
                 conn.commit();
             } catch (SQLException e) {
+                conn.prepareStatement("SET foreign_key_checks = 1").execute();
                 conn.rollback();
                 throw e;
-            }
-
-            try {
-                cleanupDeletedAccount(accountId);
-            } catch (SQLException e) {
-                System.err.println("[AccountServlet] Account was marked deleted, but cleanup failed: " + e.getMessage());
             }
 
             HttpSession session = req.getSession(false);
@@ -175,29 +184,6 @@ public class AccountServlet extends HttpServlet {
         } catch (Exception e) {
             res.setStatus(500);
             out.print("{\"error\":\"" + e.getMessage() + "\"}");
-        }
-    }
-
-    private void cleanupDeletedAccount(int accountId) throws SQLException {
-        try (Connection conn = getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                // Disable FK checks so we don't have to know every junction table
-                conn.prepareStatement("SET foreign_key_checks = 0").execute();
-                exec(conn, "DELETE FROM feedback WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
-                exec(conn, "DELETE FROM audit_trail WHERE client_id = ?", accountId);
-                exec(conn, "DELETE FROM transactions WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
-                exec(conn, "DELETE FROM message WHERE sender_id = ? OR receiver_id = ?", accountId, accountId);
-                exec(conn, "DELETE FROM listing_image WHERE listing_id IN (SELECT listing_id FROM listing WHERE client_id = ?)", accountId);
-                exec(conn, "DELETE FROM listing WHERE client_id = ?", accountId);
-                exec(conn, "DELETE FROM client WHERE account_id = ?", accountId);
-                conn.prepareStatement("SET foreign_key_checks = 1").execute();
-                conn.commit();
-            } catch (SQLException e) {
-                conn.prepareStatement("SET foreign_key_checks = 1").execute();
-                conn.rollback();
-                throw e;
-            }
         }
     }
 
