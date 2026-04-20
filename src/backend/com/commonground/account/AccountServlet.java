@@ -135,15 +135,19 @@ public class AccountServlet extends HttpServlet {
         try (Connection conn = getConnection()) {
             conn.setAutoCommit(false);
             try {
+                // Disable FK checks so we don't have to know every junction table
+                conn.prepareStatement("SET foreign_key_checks = 0").execute();
                 exec(conn, "DELETE FROM feedback WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
                 exec(conn, "DELETE FROM audit_trail WHERE client_id = ?", accountId);
                 exec(conn, "DELETE FROM transactions WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
                 exec(conn, "DELETE FROM message WHERE sender_id = ? OR receiver_id = ?", accountId, accountId);
-                exec(conn, "DELETE li FROM listing_image li JOIN listing l ON li.listing_id = l.listing_id WHERE l.client_id = ?", accountId);
+                exec(conn, "DELETE FROM listing_image WHERE listing_id IN (SELECT listing_id FROM listing WHERE client_id = ?)", accountId);
                 exec(conn, "DELETE FROM listing WHERE client_id = ?", accountId);
                 exec(conn, "DELETE FROM account WHERE account_id = ?", accountId);
+                conn.prepareStatement("SET foreign_key_checks = 1").execute();
                 conn.commit();
             } catch (SQLException e) {
+                conn.prepareStatement("SET foreign_key_checks = 1").execute();
                 conn.rollback();
                 throw e;
             }

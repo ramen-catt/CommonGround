@@ -52,15 +52,13 @@ export function ProfilePage() {
           location: data.location || 'Houston, TX',
           address: data.address,
         });
-        return Promise.all([
-          getMyListings(Number(data.id)),
-          getFeedback({ sellerId: Number(data.id) }),
-        ]);
-      })
-      .then(([listings, feedbackData]: [any[], any[]]) => {
-        // Only show listings still available — sold/removed ones don't belong here
-        setUserListings(listings.filter((l: any) => l.status === 'Available'));
-        setReviews(feedbackData.filter((f: any) => !f.isReport));
+        // Fetch independently so one failure doesn't blank the other
+        getMyListings(Number(data.id))
+          .then((listings) => setUserListings(listings.filter((l: any) => l.status === 'Available')))
+          .catch(() => setUserListings([]));
+        getFeedback({ sellerId: Number(data.id) })
+          .then((feedbackData) => setReviews((feedbackData as any[]).filter((f: any) => !f.isReport)))
+          .catch(() => setReviews([]));
       })
       .catch(() => {
         setProfile(null);

@@ -248,7 +248,7 @@ export function ChatSidebar() {
                 </div>
 
                 {/* Messages */}
-                <ScrollArea className="flex-1 p-4">
+                <div className="flex-1 overflow-y-auto p-4 min-h-0">
                   <div className="space-y-3">
                     {selectedConv?.messages.map((message) => {
                       const isMyMessage = message.senderEmail === user?.email;
@@ -282,7 +282,7 @@ export function ChatSidebar() {
                     })}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
 
                 {/* Transaction Button */}
                 {selectedConv?.listingId && selectedConv?.sellerId && String(selectedConv.sellerId) !== user?.id && (
