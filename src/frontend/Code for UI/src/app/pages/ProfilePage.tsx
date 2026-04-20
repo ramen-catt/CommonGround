@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
 import { SiteLogo } from '../components/SiteLogo';
 import { toast } from 'sonner';
-import { getMyListings, getProfile, getFeedback } from '../lib/api';
+import { getMyListings, getProfile, getFeedback, deleteAccount } from '../lib/api';
 
 interface UserProfile {
   id: string;
@@ -71,7 +71,12 @@ export function ProfilePage() {
   }, [email, currentUser, isAuthLoading]);
 
   const handleDeleteAccount = async () => {
-    toast.success('Account deleted');
+    try {
+      await deleteAccount();
+      toast.success('Account deleted');
+    } catch {
+      // session may already be gone — proceed anyway
+    }
     signOut();
     navigate('/');
   };

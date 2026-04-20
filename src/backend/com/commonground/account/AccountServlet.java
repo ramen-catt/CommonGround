@@ -120,6 +120,51 @@ public class AccountServlet extends HttpServlet {
         }
     }
 
+    @Override
+    protected void doDelete(HttpServletRequest req, HttpServletResponse res) throws IOException {
+        res.setContentType("application/json");
+        PrintWriter out = res.getWriter();
+
+        Integer accountId = getAccountId(req);
+        if (accountId == null) {
+            res.setStatus(401);
+            out.print("{\"error\":\"Not logged in\"}");
+            return;
+        }
+
+        try (Connection conn = getConnection()) {
+            conn.setAutoCommit(false);
+            try {
+                exec(conn, "DELETE FROM feedback WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
+                exec(conn, "DELETE FROM audit_trail WHERE client_id = ?", accountId);
+                exec(conn, "DELETE FROM transactions WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
+                exec(conn, "DELETE FROM message WHERE sender_id = ? OR receiver_id = ?", accountId, accountId);
+                exec(conn, "DELETE li FROM listing_image li JOIN listing l ON li.listing_id = l.listing_id WHERE l.client_id = ?", accountId);
+                exec(conn, "DELETE FROM listing WHERE client_id = ?", accountId);
+                exec(conn, "DELETE FROM account WHERE account_id = ?", accountId);
+                conn.commit();
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            }
+
+            HttpSession session = req.getSession(false);
+            if (session != null) session.invalidate();
+
+            out.print("{\"success\":true}");
+        } catch (Exception e) {
+            res.setStatus(500);
+            out.print("{\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    private void exec(Connection conn, String sql, int... params) throws SQLException {
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            for (int i = 0; i < params.length; i++) stmt.setInt(i + 1, params[i]);
+            stmt.executeUpdate();
+        }
+    }
+
     private Integer getAccountId(HttpServletRequest req) {
         HttpSession session = req.getSession(false);
         if (session == null || session.getAttribute("accountId") == null) return null;

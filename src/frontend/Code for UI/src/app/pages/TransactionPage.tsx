@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import { SiteLogo } from '../components/SiteLogo';
-import { createTransaction, getLocations, getSuggestedMeetupLocation } from '../lib/api';
+import { createTransaction, getLocations, getSuggestedMeetupLocation, getListing } from '../lib/api';
 
 export function TransactionPage() {
   const navigate = useNavigate();
@@ -18,6 +18,7 @@ export function TransactionPage() {
   const { sellerName, listingTitle, listingId, sellerId } = location.state || {};
   
   const [agreedPrice, setAgreedPrice] = useState('');
+  const [listingPrice, setListingPrice] = useState<number | null>(null);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentHandle, setPaymentHandle] = useState('');
   const [meetupLocation, setMeetupLocation] = useState('');
@@ -54,6 +55,17 @@ export function TransactionPage() {
   }, []);
 
   useEffect(() => {
+    if (listingId) {
+      getListing(Number(listingId))
+        .then((l) => {
+          setListingPrice(l.price);
+          setAgreedPrice(String(l.price));
+        })
+        .catch(() => {});
+    }
+  }, [listingId]);
+
+  useEffect(() => {
     if (!user || !sellerId) return;
 
     getSuggestedMeetupLocation({ buyerId: Number(user.id), sellerId: Number(sellerId) })
@@ -77,6 +89,11 @@ export function TransactionPage() {
     const price = parseFloat(agreedPrice);
     if (isNaN(price) || price <= 0) {
       toast.error('Please enter a valid price');
+      return;
+    }
+
+    if (listingPrice !== null && Math.abs(price - listingPrice) > 0.001) {
+      toast.error(`The number entered is not the same as the listing price ($${listingPrice.toFixed(2)})`);
       return;
     }
 

@@ -28,6 +28,7 @@ export function TransactionConfirmPage() {
   const { transactionId } = transactionState;
   
   const [transaction, setTransaction] = useState<any>(null);
+  const [txLoading, setTxLoading] = useState(true);
   const [hasConfirmed, setHasConfirmed] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [rating, setRating] = useState(0);
@@ -56,6 +57,8 @@ export function TransactionConfirmPage() {
       setHasConfirmed(isSeller ? found.sellerConfirmed : found.buyerConfirmed);
     } catch {
       setTransaction(null);
+    } finally {
+      setTxLoading(false);
     }
   };
 
@@ -135,6 +138,14 @@ export function TransactionConfirmPage() {
       toast.error(err.message || 'Could not submit review');
     }
   };
+
+  if (txLoading) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <p className="text-gray-500">Confirming transaction...</p>
+      </div>
+    );
+  }
 
   if (!transaction) {
     return (

@@ -128,6 +128,10 @@ export function updateProfile(data: { name: string; phoneNumber?: string; addres
   });
 }
 
+export function deleteAccount() {
+  return request<{ success: boolean }>('/account', { method: 'DELETE' });
+}
+
 // --- messages ---
 
 export function getConversations() {
