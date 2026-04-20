@@ -234,6 +234,36 @@ export function ProfilePage() {
               </div>
             </div>
 
+            {/* Reviews — shown first so they're visible without scrolling */}
+            <div className="border-t pt-6 mb-6">
+              <h3 className="font-semibold text-gray-900 mb-4">
+                Reviews ({profile.totalReviews})
+              </h3>
+              {reviews.length === 0 ? (
+                <p className="text-gray-500 text-sm">
+                  {profile.totalReviews > 0 ? 'Loading reviews...' : 'No reviews yet.'}
+                </p>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {renderStars(review.rating, 'sm')}
+                          <span className="font-semibold text-gray-900 text-sm">{review.rating}/5</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{formatDate(review.date)}</span>
+                      </div>
+                      {review.comment && (
+                        <p className="text-gray-700 text-sm">{review.comment}</p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">— {review.reviewerName}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Active Listings */}
             {isOwnProfile && userListings.length > 0 && (
               <div className="border-t pt-6 mb-6">
@@ -262,7 +292,7 @@ export function ProfilePage() {
             )}
 
             {isOwnProfile && userListings.length === 0 && (
-              <div className="border-t pt-6 mb-6 text-center text-gray-500">
+              <div className="border-t pt-6 text-center text-gray-500">
                 <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                 <p>No active listings.</p>
                 <Button
@@ -273,34 +303,36 @@ export function ProfilePage() {
                 </Button>
               </div>
             )}
-
-            {/* Reviews */}
-            <div className="border-t pt-6">
-              <h3 className="font-semibold text-gray-900 mb-4">
-                Reviews ({reviews.length})
-              </h3>
-              {reviews.length === 0 ? (
-                <p className="text-gray-500 text-sm">No reviews yet.</p>
-              ) : (
-                <div className="space-y-4">
-                  {reviews.map((review) => (
-                    <div key={review.id} className="bg-gray-50 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {renderStars(review.rating, 'sm')}
-                          <span className="font-semibold text-gray-900 text-sm">{review.rating}/5</span>
+            {!isOwnProfile && (
+              <div className="border-t pt-6">
+                {/* seller's active listings visible to buyers */}
+                {userListings.length > 0 && (
+                  <>
+                    <h3 className="font-semibold text-gray-900 mb-4">Active Listings</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {userListings.map((listing) => (
+                        <div
+                          key={listing.id}
+                          className="bg-gray-50 rounded-lg p-4 flex items-center gap-4 hover:bg-gray-100 transition-colors cursor-pointer"
+                          onClick={() => navigate(`/listing/${listing.id}`)}
+                        >
+                          <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                            <Package className="w-8 h-8 text-gray-400" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-medium text-gray-900 truncate hover:text-red-600">
+                              {listing.title}
+                            </h4>
+                            <p className="text-lg font-bold text-red-600">${listing.price}</p>
+                            <p className="text-sm text-gray-500">{listing.condition}</p>
+                          </div>
                         </div>
-                        <span className="text-xs text-gray-400">{formatDate(review.date)}</span>
-                      </div>
-                      {review.comment && (
-                        <p className="text-gray-700 text-sm">{review.comment}</p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-1">— {review.reviewerName}</p>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -311,7 +343,7 @@ export function ProfilePage() {
           <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4 shadow-xl">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Delete Account?</h2>
             <p className="text-gray-600 mb-6">
-              Are you sure? This will sign you out. Full account deletion requires contacting an admin.
+              Are you sure? This will permanently delete your account, listings, messages, and reviews. This cannot be undone.
             </p>
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowDeleteAccountDialog(false)}>
