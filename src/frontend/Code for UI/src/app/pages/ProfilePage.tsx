@@ -72,11 +72,13 @@ export function ProfilePage() {
     try {
       await deleteAccount();
       toast.success('Account deleted');
-    } catch {
-      // session may already be gone — proceed anyway
+      setShowDeleteAccountDialog(false);
+      signOut();
+      navigate('/');
+    } catch (err: any) {
+      toast.error(err.message || 'Could not delete account');
+      return;
     }
-    signOut();
-    navigate('/');
   };
 
   const renderStars = (rating: number, size: 'sm' | 'md' = 'md') => {
