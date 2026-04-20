@@ -310,7 +310,7 @@ function TransactionCard({
 
       <div className="flex items-center justify-between pt-4 border-t border-gray-200 gap-3">
         <p className="text-xs text-gray-500">
-          {new Date(transaction.timestamp).toLocaleDateString('en-US', {
+          {new Date(transaction.timestamp.replace(' ', 'T') + 'Z').toLocaleDateString('en-US', {
             month: 'long', day: 'numeric', year: 'numeric',
             hour: 'numeric', minute: '2-digit',
           })}

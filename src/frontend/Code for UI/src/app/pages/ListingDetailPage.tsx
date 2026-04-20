@@ -19,6 +19,12 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog';
 
+function formatDate(raw: string): string {
+  if (!raw) return '';
+  const d = new Date(raw.replace(' ', 'T') + 'Z');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
 export function ListingDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -86,6 +92,7 @@ export function ListingDetailPage() {
   };
 
   const handleDeleteListing = async () => {
+    setShowDeleteDialog(false);
     try {
       await deleteListing(listing.id, parseInt(user!.id));
       toast.success('Listing deleted');
@@ -193,7 +200,7 @@ export function ListingDetailPage() {
               <div className="flex items-center space-x-4 text-sm text-gray-600">
                 <div className="flex items-center space-x-1">
                   <Calendar className="w-4 h-4" />
-                  <span>Posted {listing.postedDate}</span>
+                  <span>Posted {formatDate(listing.postedDate)}</span>
                 </div>
               </div>
 
@@ -221,7 +228,7 @@ export function ListingDetailPage() {
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-gray-900">{listing.listerName}</p>
                     </div>
-                    <p className="text-sm text-gray-500">Member since {listing.listerJoinDate || 'N/A'}</p>
+                    <p className="text-sm text-gray-500">Member since {formatDate(listing.listerJoinDate) || 'N/A'}</p>
                   </div>
                 </div>
                 

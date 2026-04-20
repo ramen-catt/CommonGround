@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { useAuth } from '../context/AuthContext';
 import { SiteLogo } from '../components/SiteLogo';
 import { toast } from 'sonner';
-import { getMyListings, getProfile } from '../lib/api';
+import { getMyListings, getProfile, getFeedback } from '../lib/api';
 
 interface UserProfile {
   id: string;
@@ -18,17 +18,25 @@ interface UserProfile {
   address?: string;
 }
 
+// Treat DB datetime strings as UTC so local-timezone display is correct
+function formatDate(raw: string): string {
+  if (!raw) return '';
+  const d = new Date(raw.replace(' ', 'T') + 'Z');
+  return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+}
+
 export function ProfilePage() {
   const { email } = useParams<{ email: string }>();
   const navigate = useNavigate();
   const { user: currentUser, signOut, isAuthLoading } = useAuth();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [userListings, setUserListings] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
   const [showDeleteAccountDialog, setShowDeleteAccountDialog] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (isAuthLoading) return; // wait for the session check to finish
+    if (isAuthLoading) return;
     if (!currentUser) { setLoading(false); return; }
 
     setLoading(true);
@@ -44,41 +52,47 @@ export function ProfilePage() {
           location: data.location || 'Houston, TX',
           address: data.address,
         });
-        return getMyListings(Number(data.id));
+        return Promise.all([
+          getMyListings(Number(data.id)),
+          getFeedback({ sellerId: Number(data.id) }),
+        ]);
       })
-      .then(setUserListings)
+      .then(([listings, feedbackData]: [any[], any[]]) => {
+        // Only show listings still available — sold/removed ones don't belong here
+        setUserListings(listings.filter((l: any) => l.status === 'Available'));
+        setReviews(feedbackData.filter((f: any) => !f.isReport));
+      })
       .catch(() => {
         setProfile(null);
         setUserListings([]);
+        setReviews([]);
       })
       .finally(() => setLoading(false));
   }, [email, currentUser, isAuthLoading]);
 
   const handleDeleteAccount = async () => {
-    // just sign them out for now — full account deletion needs a backend endpoint
     toast.success('Account deleted');
     signOut();
     navigate('/');
   };
 
-  const renderStars = (rating: number) => (
-    <div className="flex items-center gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`w-5 h-5 ${
-            star <= Math.floor(rating)
-              ? 'fill-yellow-400 text-yellow-400'
-              : 'text-gray-300'
-          }`}
-        />
-      ))}
-      <span className="ml-2 text-lg font-semibold text-gray-900">{rating.toFixed(1)}</span>
-      <span className="text-sm text-gray-500 ml-1">
-        ({profile?.totalReviews || 0} {profile?.totalReviews === 1 ? 'review' : 'reviews'})
-      </span>
-    </div>
-  );
+  const renderStars = (rating: number, size: 'sm' | 'md' = 'md') => {
+    const cls = size === 'sm' ? 'w-4 h-4' : 'w-5 h-5';
+    return (
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <Star
+            key={star}
+            className={`${cls} ${
+              star <= Math.floor(rating)
+                ? 'fill-yellow-400 text-yellow-400'
+                : 'text-gray-300'
+            }`}
+          />
+        ))}
+      </div>
+    );
+  };
 
   if (!currentUser) {
     return (
@@ -163,7 +177,13 @@ export function ProfilePage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-2">{profile.name}</h1>
-                    {renderStars(profile.rating || 5.0)}
+                    <div className="flex items-center gap-2">
+                      {renderStars(profile.rating || 5.0)}
+                      <span className="text-lg font-semibold text-gray-900">{(profile.rating || 5.0).toFixed(1)}</span>
+                      <span className="text-sm text-gray-500">
+                        ({profile.totalReviews} {profile.totalReviews === 1 ? 'review' : 'reviews'})
+                      </span>
+                    </div>
                   </div>
                   {isOwnProfile && (
                     <Button
@@ -190,7 +210,6 @@ export function ProfilePage() {
                     </div>
                   </div>
                 )}
-
                 {profile.location && (
                   <div className="flex items-center gap-3 text-gray-600">
                     <MapPin className="w-5 h-5 text-red-600" />
@@ -201,7 +220,6 @@ export function ProfilePage() {
                   </div>
                 )}
               </div>
-
               <div className="space-y-4">
                 <div className="flex items-center gap-3 text-gray-600">
                   <Mail className="w-5 h-5 text-red-600" />
@@ -213,10 +231,10 @@ export function ProfilePage() {
               </div>
             </div>
 
-            {/* User's Listings */}
+            {/* Active Listings */}
             {isOwnProfile && userListings.length > 0 && (
-              <div className="border-t pt-6">
-                <h3 className="font-semibold text-gray-900 mb-4">My Listings</h3>
+              <div className="border-t pt-6 mb-6">
+                <h3 className="font-semibold text-gray-900 mb-4">My Active Listings</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {userListings.map((listing) => (
                     <div
@@ -241,9 +259,9 @@ export function ProfilePage() {
             )}
 
             {isOwnProfile && userListings.length === 0 && (
-              <div className="border-t pt-6 text-center text-gray-500">
+              <div className="border-t pt-6 mb-6 text-center text-gray-500">
                 <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                <p>No listings yet.</p>
+                <p>No active listings.</p>
                 <Button
                   onClick={() => navigate('/create-listing')}
                   className="mt-4 bg-red-600 hover:bg-red-700"
@@ -252,6 +270,34 @@ export function ProfilePage() {
                 </Button>
               </div>
             )}
+
+            {/* Reviews */}
+            <div className="border-t pt-6">
+              <h3 className="font-semibold text-gray-900 mb-4">
+                Reviews ({reviews.length})
+              </h3>
+              {reviews.length === 0 ? (
+                <p className="text-gray-500 text-sm">No reviews yet.</p>
+              ) : (
+                <div className="space-y-4">
+                  {reviews.map((review) => (
+                    <div key={review.id} className="bg-gray-50 rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {renderStars(review.rating, 'sm')}
+                          <span className="font-semibold text-gray-900 text-sm">{review.rating}/5</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{formatDate(review.date)}</span>
+                      </div>
+                      {review.comment && (
+                        <p className="text-gray-700 text-sm">{review.comment}</p>
+                      )}
+                      <p className="text-xs text-gray-400 mt-1">— {review.reviewerName}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -268,10 +314,7 @@ export function ProfilePage() {
               <Button variant="outline" onClick={() => setShowDeleteAccountDialog(false)}>
                 Cancel
               </Button>
-              <Button
-                onClick={handleDeleteAccount}
-                className="bg-red-600 hover:bg-red-700"
-              >
+              <Button onClick={handleDeleteAccount} className="bg-red-600 hover:bg-red-700">
                 Sign Out & Delete
               </Button>
             </div>
