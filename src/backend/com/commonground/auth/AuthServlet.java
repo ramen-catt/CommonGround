@@ -19,6 +19,7 @@ public class AuthServlet extends HttpServlet {
     @Override
     public void init() {
         try {
+            ensureDeletedAccountTable();
             ensureDemoAccount("tester1", "tester1@gmail.com", "tester1", false, true, true);
             ensureDemoAccount("tester2", "tester2@gmail.com", "tester2", false, true, true);
             ensureDemoAccount("adriana_admin", "adriana_admin@commonground.com", "admin", true, false, false);
@@ -93,6 +94,12 @@ public class AuthServlet extends HttpServlet {
         String password = body.get("password").getAsString();
         String hashed   = sha256(password);
         String usernameGuess = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
+
+        if (isDeletedAccount(email, usernameGuess)) {
+            res.setStatus(403);
+            out.print("{\"error\":\"This account has been deleted\"}");
+            return;
+        }
 
         String sql = "SELECT a.account_id, a.username, a.email, a.address, a.password_hash, " +
                      "a.is_admin, a.is_suspended, " +
@@ -183,6 +190,12 @@ public class AuthServlet extends HttpServlet {
         String phone    = body.has("phoneNumber") ? body.get("phoneNumber").getAsString() : "";
         String address  = body.has("address")     ? body.get("address").getAsString()     : "";
         String hashed   = sha256(password);
+
+        if (isDeletedAccount(email, username)) {
+            res.setStatus(409);
+            out.print("{\"error\":\"That account was deleted and cannot be used again\"}");
+            return;
+        }
 
         String checkSql = "SELECT account_id FROM account WHERE email = ?";
         try (Connection conn = getConnection();
@@ -280,6 +293,10 @@ public class AuthServlet extends HttpServlet {
 
     private void ensureDemoAccount(String username, String email, String password,
                                    boolean isAdmin, boolean canList, boolean canPurchase) throws SQLException {
+        if (isDeletedAccount(email, username)) {
+            return;
+        }
+
         String hashed = sha256(password);
         Integer accountId = null;
 
@@ -333,6 +350,31 @@ public class AuthServlet extends HttpServlet {
                 client.setBoolean(3, canPurchase);
                 client.executeUpdate();
             }
+        }
+    }
+
+    private void ensureDeletedAccountTable() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS deleted_account (" +
+                     "deleted_account_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                     "email VARCHAR(100) NOT NULL UNIQUE, " +
+                     "username VARCHAR(50) NOT NULL UNIQUE, " +
+                     "deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                     ")";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.executeUpdate();
+        }
+    }
+
+    private boolean isDeletedAccount(String email, String username) throws SQLException {
+        ensureDeletedAccountTable();
+        String sql = "SELECT deleted_account_id FROM deleted_account " +
+                     "WHERE LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?) LIMIT 1";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email != null ? email.trim() : "");
+            stmt.setString(2, username != null ? username.trim() : "");
+            return stmt.executeQuery().next();
         }
     }
 

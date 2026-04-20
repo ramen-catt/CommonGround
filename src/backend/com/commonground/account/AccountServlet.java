@@ -135,6 +135,18 @@ public class AccountServlet extends HttpServlet {
         try (Connection conn = getConnection()) {
             conn.setAutoCommit(false);
             try {
+                JsonObject deletedAccount = getAccountForDeletion(conn, accountId);
+                if (deletedAccount == null) {
+                    res.setStatus(404);
+                    out.print("{\"error\":\"Account not found\"}");
+                    conn.rollback();
+                    return;
+                }
+                ensureDeletedAccountTable(conn);
+                rememberDeletedAccount(conn,
+                        deletedAccount.get("email").getAsString(),
+                        deletedAccount.get("username").getAsString());
+
                 // Disable FK checks so we don't have to know every junction table
                 conn.prepareStatement("SET foreign_key_checks = 0").execute();
                 exec(conn, "DELETE FROM feedback WHERE buyer_id = ? OR seller_id = ?", accountId, accountId);
@@ -143,6 +155,7 @@ public class AccountServlet extends HttpServlet {
                 exec(conn, "DELETE FROM message WHERE sender_id = ? OR receiver_id = ?", accountId, accountId);
                 exec(conn, "DELETE FROM listing_image WHERE listing_id IN (SELECT listing_id FROM listing WHERE client_id = ?)", accountId);
                 exec(conn, "DELETE FROM listing WHERE client_id = ?", accountId);
+                exec(conn, "DELETE FROM client WHERE account_id = ?", accountId);
                 exec(conn, "DELETE FROM account WHERE account_id = ?", accountId);
                 conn.prepareStatement("SET foreign_key_checks = 1").execute();
                 conn.commit();
@@ -159,6 +172,42 @@ public class AccountServlet extends HttpServlet {
         } catch (Exception e) {
             res.setStatus(500);
             out.print("{\"error\":\"" + e.getMessage() + "\"}");
+        }
+    }
+
+    private JsonObject getAccountForDeletion(Connection conn, int accountId) throws SQLException {
+        String sql = "SELECT username, email FROM account WHERE account_id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, accountId);
+            ResultSet rs = stmt.executeQuery();
+            if (!rs.next()) return null;
+
+            JsonObject account = new JsonObject();
+            account.addProperty("username", rs.getString("username"));
+            account.addProperty("email", rs.getString("email"));
+            return account;
+        }
+    }
+
+    private void ensureDeletedAccountTable(Connection conn) throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS deleted_account (" +
+                     "deleted_account_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                     "email VARCHAR(100) NOT NULL UNIQUE, " +
+                     "username VARCHAR(50) NOT NULL UNIQUE, " +
+                     "deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                     ")";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.executeUpdate();
+        }
+    }
+
+    private void rememberDeletedAccount(Connection conn, String email, String username) throws SQLException {
+        String sql = "INSERT INTO deleted_account (email, username) VALUES (?, ?) " +
+                     "ON DUPLICATE KEY UPDATE deleted_at = CURRENT_TIMESTAMP";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email);
+            stmt.setString(2, username);
+            stmt.executeUpdate();
         }
     }
 
