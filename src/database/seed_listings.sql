@@ -10,12 +10,13 @@ SET SQL_SAFE_UPDATES = 0;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ─────────────────────────────────────────
---  CLEAR OLD SEED DATA (fresh start)
+--  CLEAR OLD LISTINGS (fresh start)
+--  Only clears listings and images — never deletes accounts so real
+--  registered users are not wiped. Accounts below use INSERT IGNORE
+--  so re-running this script is safe.
 -- ─────────────────────────────────────────
 DELETE FROM listing_image;
 DELETE FROM listing;
-DELETE FROM client WHERE account_id IN (SELECT account_id FROM account WHERE (email LIKE '%@commonground.com' OR email LIKE '%@gmail.com' OR email LIKE '%@yahoo.com' OR email LIKE '%@outlook.com') AND is_admin = FALSE);
-DELETE FROM account WHERE (email LIKE '%@commonground.com' OR email LIKE '%@gmail.com' OR email LIKE '%@yahoo.com' OR email LIKE '%@outlook.com') AND is_admin = FALSE;
 
 -- ─────────────────────────────────────────
 --  CATEGORIES
@@ -38,22 +39,14 @@ INSERT IGNORE INTO location (location_id, name, address, latitude, longitude)
 VALUES (1,'University of Houston','4800 Calhoun Rd, Houston, TX 77004',29.7199,-95.3422);
 
 -- ─────────────────────────────────────────
---  ACCOUNTS
---  Main demo logins for testing:
---    tester1@gmail.com              / tester1
---    tester2@gamil.com              / tester2
---    admin@commonground.com         / admin
---    adriana_admin@commonground.com / admin
---  Other sample users keep password: password123
+--  ACCOUNTS  (password for ALL = password123)
+--  SHA-256 hash of "password123"
 -- ─────────────────────────────────────────
-SET @pw = 'ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f';
-SET @tester1_pw = '7abcddbb2c74e4c0789c2c0aa6abcf5172e82e9f4916bc6409fc3989ed673e08';
-SET @tester2_pw = '7cd477192d54ceb8673be093f443b8622c612896880f6879c7f8ec16fa7ba114';
-SET @admin_pw = '8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918';
+SET @pw = 'ef92b778bafe771207978e41d48c1b4beb5b274f2ee4e93e2f8be1e6491e73ab';
 
 INSERT IGNORE INTO account (username, password_hash, phone_number, address, email) VALUES
-('tester1',      @tester1_pw, '7135550101', 'Houston, TX', 'tester1@gmail.com'),
-('tester2',      @tester2_pw, '7135550102', 'Houston, TX', 'tester2@gamil.com'),
+('tester1',      @pw, '7135550101', 'Houston, TX', 'tester1@commonground.com'),
+('tester2',      @pw, '7135550102', 'Houston, TX', 'tester2@commonground.com'),
 ('marcus_r',     @pw, '7134450192', 'Houston, TX', 'marcus.r@gmail.com'),
 ('sofia_m',      @pw, '8328871045', 'Houston, TX', 'sofia.m@gmail.com'),
 ('jalen_w',      @pw, '7138329901', 'Houston, TX', 'jalen.w@gmail.com'),
@@ -93,37 +86,10 @@ INSERT IGNORE INTO account (username, password_hash, phone_number, address, emai
 ('sarah_no',     @pw, '7139012346', 'Houston, TX', 'sarah.no@gmail.com'),
 ('tre_w',        @pw, '8321234567', 'Houston, TX', 'tre.w@gmail.com');
 
--- Admin demo accounts.
-INSERT INTO account (username, password_hash, phone_number, address, email, is_admin, is_suspended)
-VALUES
-('admin',         @admin_pw, '5550000000', 'Houston, TX', 'admin@commonground.com', TRUE, FALSE),
-('adriana_admin', @admin_pw, '5559999999', 'Houston, TX', 'adriana_admin@commonground.com', TRUE, FALSE)
-ON DUPLICATE KEY UPDATE
-password_hash = VALUES(password_hash),
-email = VALUES(email),
-is_admin = VALUES(is_admin),
-is_suspended = VALUES(is_suspended);
-
--- Keep tester demo accounts correct if this script is run over older seed data.
-UPDATE account
-SET password_hash = @tester1_pw,
-    email = 'tester1@gmail.com',
-    is_admin = FALSE,
-    is_suspended = FALSE
-WHERE username = 'tester1';
-
-UPDATE account
-SET password_hash = @tester2_pw,
-    email = 'tester2@gamil.com',
-    is_admin = FALSE,
-    is_suspended = FALSE
-WHERE username = 'tester2';
-
 -- client row for every account
 INSERT IGNORE INTO client (account_id, can_list, can_purchase)
 SELECT account_id, TRUE, TRUE FROM account
-WHERE is_admin = FALSE
-  AND (email LIKE '%@commonground.com' OR email LIKE '%@gmail.com' OR email LIKE '%@gamil.com' OR email LIKE '%@yahoo.com' OR email LIKE '%@outlook.com');
+WHERE email LIKE '%@commonground.com' OR email LIKE '%@gmail.com' OR email LIKE '%@yahoo.com' OR email LIKE '%@outlook.com';
 
 -- ─────────────────────────────────────────
 --  LISTINGS  (distributed across accounts)
@@ -135,57 +101,57 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = "Men's Clothi
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='marcus_r'),@loc,@cat,'Cash',"Levi's 501 Original Fit Jeans – 32x30",35.00,"Classic dark wash straight-leg Levi's 501s. Worn maybe 10 times — no fading, rips, or stains. Great everyday jean that goes with everything.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1542272604-787c3835535d?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://media.npr.org/assets/img/2022/10/13/ap19333669151901-d74a63068fb8b633fc21533dd42fd3e222ab9119.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tyler_b'),@loc,@cat,'Cash','Nike Tech Fleece Full-Zip Hoodie – Size L',65.00,"Men's Nike Tech Fleece in heather grey, size Large. Barely worn — still has that soft brushed feel inside. No pilling or damage.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://static.nike.com/a/images/t_PDP_1728_v1/f_auto,q_auto:eco,c_scale,w_300,u_9ddf04c7-2a9a-4d76-add1-d15af8f0263d,c_scale,fl_relative,w_1.0,h_1.0,fl_layer_apply/b083c11c-3776-4d1c-b7f5-dbd217428eb6/M+NK+TCH+FLC+FZ+WR+HOODIE.png');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='jalen_w'),@loc,@cat,'Cash','Vintage Levi Denim Trucker Jacket – Size M',50.00,"90s Levi's trucker denim jacket, size Medium. Faded wash with natural wear that gives it character. All buttons intact.",'Fair','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1551028719-00167b16eac5?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://dinerdrip.com/cdn/shop/products/JEANJACKET1_DINERDRIPPREMIUMS_RGB_CC.jpg?v=1678399023');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='sean_p'),@loc,@cat,'Cash','Ralph Lauren Polo Shirt Bundle – Size M (4 shirts)',48.00,"Four classic Ralph Lauren polo shirts in size Medium — navy, white, green, and red. All in excellent condition, no fading or pilling.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1625910513586-09cb7e1efcd9?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/G00AAOSwOEBmmpTe/s-l1200.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='chris_ab'),@loc,@cat,'Cash','Carhartt WIP Beanie + Scarf Set – Black',22.00,"Carhartt WIP knit beanie and matching scarf in classic black. Worn one winter season. No pilling, acrylic knit still looks sharp.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1520903920243-00d872a2d1c9?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://us.carhartt-wip.com/en-us/collections/men-accessories-beanies');
 
 -- ── WOMEN'S CLOTHING ─────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = "Women's Clothing");
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='sofia_m'),@loc,@cat,'Cash','Zara Satin Wrap Midi Dress – Size S',38.00,"Dusty rose satin wrap dress from Zara, size Small. Worn once to a birthday dinner. Flows beautifully, hits mid-calf.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://u-mercari-images.mercdn.net/photos/m87753209499_1.jpg?width=2560&quality=75&_=1744405248');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='natalie_v'),@loc,@cat,'Cash','H&M Oversized Linen Blazer – Size M',42.00,"Cream linen blazer from H&M, size Medium. Perfect for casual office looks or brunch. Light and breathable. Worn twice, no damage.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1591047139829-d91aecb6caea?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www2.hm.com/en_us/productpage.1217864001.html');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='jade_p'),@loc,@cat,'Cash','SKIMS Cotton Ribbed Tank – Size S',18.00,"SKIMS cotton ribbed tank in sand/beige, size Small. Soft, stretchy, and flattering. Worn a handful of times, washed on gentle. No damage.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1485968579580-b6d095142e6e?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.net-a-porter.com/variants/images/1647597338573216/e2/w2000_q60.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='camila_s'),@loc,@cat,'Cash','Free People Boho Maxi Skirt – Size XS/S',30.00,"Flowy Free People maxi skirt in a sage green floral print. Elastic waist, super comfortable. Perfect for summer. Light wash wear, no damage.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1583496661160-fb5218afa404?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.asos-media.com/products/free-people-tiered-boho-maxi-skirt-in-optic-white/204724483-1-opticwhite?$n_640w$&wid=513&fit=constrain');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='aaliyah_b'),@loc,@cat,'Cash','Aritzia Wilfred Cocoon Coat – Size XS',120.00,"Aritzia Wilfred Cocoon coat in camel, size XS. Classic silhouette, super warm. Dry cleaned and stored well. Minor wear on cuffs. Retail $298.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/LH0AAOSwYI1lOe2q/s-l400.jpg');
 
 -- ── KIDS' CLOTHING ───────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = "Kids' Clothing");
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='isabella_r'),@loc,@cat,'Cash','Baby Gap Onesie Bundle – 6-9M (7 pieces)',20.00,"Seven Baby Gap onesies in size 6-9 months. Mix of short and long sleeve. Gently used, washed on gentle. My baby outgrew them too fast!",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1519238263530-99bdd11df2ea?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcS9hV2qtt9K1EjvT-NBul7bf5RrL5uDqPj84w&s');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
-((SELECT account_id FROM account WHERE username='mia_flores'),@loc,@cat,'Cash','Nike Kids Tracksuit Set – Size 6',28.00,"Nike matching tracksuit jacket and pants for kids size 6. Navy blue with white stripes. Worn a couple times, excellent condition.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1622290291468-a28f7a7dc6a8?w=800');
+((SELECT account_id FROM account WHERE username='mia_flores'),@loc,@cat,'Cash','ike Kids Tracksuit SetN – Size 6',28.00,"Nike matching tracksuit jacket and pants for kids size 6. Navy blue with white stripes. Worn a couple times, excellent condition.",'Like New','Available');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.childsplayclothing.com/cdn/shop/files/NIKA3049_BLACK_1.jpg?v=1724497380&width=2835');
 
 -- ── SHOES & FOOTWEAR ─────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Shoes & Footwear');
@@ -200,7 +166,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='yara_h'),@loc,@cat,'Cash','Adidas Ultraboost 22 – Women Size 7',70.00,"Adidas Ultraboost 22 running shoes, white colorway, women's size 7. Barely worn — maybe 3 runs. Comes with original box.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1600185365483-26d7a4cc7519?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn.fleetfeet.com/a:1.3333333333333-f:cover-w:1200/assets/adidasultraboost.jpeg?s=ae640b72');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='darius_f'),@loc,@cat,'Cash','New Balance 550 – Men Size 10 (White/Green)',88.00,"New Balance 550 retro basketball shoe in white and green. Men's size 10. Deadstock, worn twice. Comes with box and extra laces.",'Like New','Available');
@@ -215,7 +181,7 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = 'Bags & Acces
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='sofia_m'),@loc,@cat,'Cash','Coach Tabby Shoulder Bag – Tan Leather',165.00,"Authentic Coach Tabby shoulder bag in tan pebbled leather. Used 6 months. Minor wear on corners, interior clean. Comes with dust bag.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/5pIAAOSwUPdnHmc9/s-l1200.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='ethan_s'),@loc,@cat,'Cash','Herschel Little America Backpack – Black',40.00,"Herschel Little America 25L backpack in classic black. Used for one semester. No tears, zippers perfect. Fits 15-inch laptop.",'Good','Available');
@@ -234,7 +200,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='valentina_c'),@loc,@cat,'Cash','Gold Layered Paperclip Chain Necklace Set (3pc)',18.00,"Set of 3 gold-plated layered necklaces — paperclip, box chain, and figaro. Lengths 16, 18, 20 inches. No tarnish, all clasps work.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.lonipaul.com/cdn/shop/products/gold-necklace-stack-eye-bar-loni-paul-2_f5f5df51-1713-4d52-ac81-44bcc5ae61b4_1800x1800.jpg?v=1694526632');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='chloe_n'),@loc,@cat,'Cash','Pandora Moments Charm Bracelet + 5 Charms',85.00,"Pandora sterling silver moments bracelet with 5 charms: star, heart, flower, initial C, and birthstone. Cleaned and polished. Comes in Pandora box.",'Good','Available');
@@ -295,7 +261,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='noah_c'),@loc,@cat,'Cash','Dell XPS 15 – i7/16GB/512GB + GTX 1650 Ti',680.00,"Dell XPS 15, Intel Core i7-10750H, 16GB RAM, 512GB NVMe, GTX 1650 Ti. 15.6-inch 4K OLED touch screen. Minor keyboard wear. Charger included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://platform.theverge.com/wp-content/uploads/sites/2/chorus/uploads/chorus_asset/file/20030547/mchin_180905_4061_0009.jpg?quality=90&strip=all&crop=16.666666666667,0,66.666666666667,100');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='malik_j'),@loc,@cat,'Cash','Custom Gaming PC – RTX 3070 / i7-12700K / 32GB',980.00,"Full gaming PC build: RTX 3070, Intel i7-12700K, 32GB DDR5, 1TB NVMe SSD, 750W PSU, mid-tower case with RGB. Runs everything at max settings.",'Good','Available');
@@ -310,7 +276,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tester2'),@loc,@cat,'Cash','Nintendo Switch OLED – White + 4 Games',310.00,"Nintendo Switch OLED with Mario Kart 8, Animal Crossing, Zelda BOTW, and Splatoon 3. Screen no scratches. Joy-cons work perfectly. Dock included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1612287230202-1ff1d85d1bdf?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://press-start.com.au/wp-content/uploads/2021/10/Switch-OLED.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='jordan_t'),@loc,@cat,'Cash','Xbox Series X – Console + 2 Controllers',480.00,"Xbox Series X console with 2 wireless controllers (one carbon black, one robot white). All cables included. Plays 4K at 120fps. Works flawlessly.",'Like New','Available');
@@ -318,26 +284,26 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='brandon_k'),@loc,@cat,'Cash','Xbox Series X Controller – Carbon Black',38.00,"Official Xbox Series X controller. Used a dozen sessions, thumbstick grip still perfect. No drift. USB-C port works fine.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1593118247619-e2d6f056869e?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://xboxwire.thesourcemediaassets.com/sites/2/2020/03/XboxSeriesXController_HERO.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='oscar_t'),@loc,@cat,'Cash','Steam Deck 512GB + Carrying Case',420.00,"Valve Steam Deck 512GB NVMe. Plays AAA games on the go. Screen protector applied since day one. 8 months old. Comes with official case and charger.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1649944049991-698c2e9b7fcb?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ytimg.com/vi/F5OPsAHJAW0/maxresdefault.jpg');
 
 -- ── CAMERAS & PHOTOGRAPHY ────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Cameras & Photography');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='elena_w'),@loc,@cat,'Cash','Canon EOS Rebel SL3 + 18-55mm Kit Lens',520.00,"Canon EOS Rebel SL3 DSLR, shutter count under 3,000. 4K video, 24MP stills. Comes with 2 batteries, charger, 32GB SD card, and original box.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/A9gAAOSwLollxRyM/s-l1200.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='carlos_m'),@loc,@cat,'Cash','GoPro Hero 10 Black + Accessories Bundle',220.00,"GoPro Hero 10. 5.3K video, incredible stabilization. Comes with 2 batteries, dual charger, chest mount, and head strap.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://u-mercari-images.mercdn.net/photos/m58174516888_1.jpg?width=2560&quality=75&_=1721403069');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='sarah_no'),@loc,@cat,'Cash','Sony ZV-1 Vlog Camera – Black',280.00,"Sony ZV-1 compact vlog camera. Perfect for YouTube and content creation. 20.1MP, 4K video, built-in ND filter, directional mic. Barely used. Box included.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1617042375876-a13e36732a04?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn.mos.cms.futurecdn.net/E564MRaWTYLVhCr5kn8M4o.jpg');
 
 -- ── FURNITURE ────────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Furniture');
@@ -352,7 +318,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='chris_ab'),@loc,@cat,'Cash','Ergonomic Mesh Office Chair – Black',88.00,"High-back ergonomic mesh office chair. Lumbar support, adjustable armrests, seat height, tilt tension. Used 1 year. Mesh clean, wheels roll smoothly.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1567538096630-e0c55bd6374c?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://roomanddecor.com/cdn/shop/files/69d4241dcd8ccbe3ce92c5e651eb789b.jpg?crop=center&height=2048&v=1725060518&width=2048');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='luke_rj'),@loc,@cat,'Cash','Queen Size Bed Frame – Dark Walnut (No Mattress)',120.00,"Solid wood queen platform bed frame in dark walnut. Slat support included. No box spring needed. Minor scuff on one leg. Disassembles easily.",'Good','Available');
@@ -371,22 +337,22 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='hannah_l'),@loc,@cat,'Cash','Dyson V8 Cordless Vacuum – Absolute',165.00,"Dyson V8 Absolute cordless vacuum. Up to 40 min runtime. Comes with all original attachments. Filter cleaned. Suction is still strong. Upgraded to V15.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://media.kohlsimg.com/is/image/kohls/7350957_ALT3?wid=400&hei=400&op_sharpen=1');
 
 -- ── KITCHEN & DINING ─────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Kitchen & Dining');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='natalie_v'),@loc,@cat,'Cash','KitchenAid Artisan Stand Mixer – 5qt Empire Red',195.00,"KitchenAid Artisan 5-quart stand mixer in Empire Red. Comes with flat beater, dough hook, and wire whip. Used once. Works perfectly.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1556909172-54557c7e4fb7?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://ak1.ostkcdn.com/images/products/is/images/direct/7143136bb9309c3b94b798502e51c3a8dbd57355/KitchenAid-Artisan-Series-5-Quart-Tilt-Back-Head-Stand-Mixer-in-Matte-Dried-Rose.jpg?impolicy=medium');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tester2'),@loc,@cat,'Cash','Cuisinart 12-Piece Stainless Steel Cookware Set',80.00,"Cuisinart MultiClad Pro 12-piece set. Saucepans, sauté pan, stockpot, skillets, all with lids. Oven safe to 550°F. Some surface marks, no warping.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1556909114-f6e7ad7d3136?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://reviewed-com-res.cloudinary.com/image/fetch/s--pLn1Yae0--/b_white,c_limit,cs_srgb,f_auto,fl_progressive.strip_profile,g_center,q_auto,w_972/https://reviewed-production.s3.amazonaws.com/1709216701777/cuisinart.PNG');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='jordan_t'),@loc,@cat,'Cash','Nespresso Vertuo Pop Coffee Maker – White',55.00,"Nespresso Vertuo Pop. Makes coffee, espresso, gran lungo, and alto. Works perfectly, descaled twice. Just switched to drip coffee.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/y3UAAOSwFEdnTYx~/s-l1200.jpg');
 
 -- ── TOOLS & HARDWARE ─────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Tools & Hardware');
@@ -404,19 +370,19 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = 'Books & Maga
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='isabella_r'),@loc,@cat,'Cash','Harry Potter Complete Hardcover Box Set (1-7)',65.00,"Entire Harry Potter series in hardcover. Minor cover rubs but all spines intact, no loose pages. No highlighting or writing inside.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1512820790803-83ca734da794?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/DpsAAOSwpHNjRcxJ/s-l400.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='ethan_s'),@loc,@cat,'Cash','MCAT Complete 7-Book Prep Bundle – Kaplan',40.00,"Kaplan MCAT 7-book review set. Covers all subjects. Minimal highlighting in 2 books. Great for self-study.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.ebay.com/itm/155135571544');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='chloe_n'),@loc,@cat,'Cash','Atomic Habits – James Clear (Hardcover)',8.00,"Atomic Habits by James Clear, hardcover. Read once, no damage, no markings. One of the best productivity books. Passing it on.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1544716278-ca5e3f4abd8c?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/UTsAAOSwEqBm0gnu/s-l1200.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='alex_dm'),@loc,@cat,'Cash','UH Engineering Textbook Bundle – 4 Books',55.00,"Four upper-division engineering textbooks used at UH: Thermodynamics (Cengel), Fluid Mechanics, Circuits (Hayt), and Statics (Hibbeler). Light highlighting throughout.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://m.media-amazon.com/images/I/91k47DK3g7L._AC_UF1000,1000_QL80_.jpg');
 
 -- ── MUSIC & INSTRUMENTS ──────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Music & Instruments');
@@ -434,11 +400,11 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = 'Movies & TV'
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='kevin_lh'),@loc,@cat,'Cash','Marvel MCU 23-Film Blu-ray Collection (Phases 1-3)',75.00,"Complete MCU Phases 1-3 Blu-ray — all 23 movies from Iron Man to Endgame. All discs play perfectly. Cases in great condition.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1585647347483-22b66260dfff?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/Vy0AAeSwLDppyY49/s-l1200.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tyler_b'),@loc,@cat,'Cash','Breaking Bad Complete Series DVD Box Set',25.00,"Breaking Bad all 5 seasons on DVD. Good condition, minor shelf wear on box. All 21 discs play without issue.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/images/g/hV0AAOSwehJj52uG/s-l1200.jpg');
 
 -- ── SPORTS & OUTDOORS ────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Sports & Outdoors');
@@ -449,7 +415,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='devin_c'),@loc,@cat,'Cash','Bowflex SelectTech 552 Adjustable Dumbbells (Pair)',195.00,"Bowflex SelectTech 552, 5-52.5 lbs each. Both dials click perfectly. Storage trays included. Replaced a whole rack of dumbbells.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn.mos.cms.futurecdn.net/iaNv9AScoZXywZhW4K2vfJ.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='yara_h'),@loc,@cat,'Cash','Manduka PRO Yoga Mat – 71" Black',68.00,"Manduka PRO yoga mat, 71 inches, 6mm thick. Closed-cell surface, never absorbs sweat. Used 8 months, excellent condition. Comes with strap.",'Like New','Available');
@@ -464,15 +430,15 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = 'Toys & Games
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='mia_flores'),@loc,@cat,'Cash','Catan Base Game + Seafarers Expansion',38.00,"Catan base game + Seafarers expansion. Both complete — all pieces, cards, and boards. Tiles and cards in great shape.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1611996575749-79a3a250f948?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.redd.it/42hdlu3dz3u51.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='noah_c'),@loc,@cat,'Cash','LEGO Technic Bugatti Chiron (42083) – Complete',185.00,"LEGO Technic Bugatti Chiron, 3,599 pieces. Fully built then disassembled and bagged by color. All pieces verified twice. All booklets included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ytimg.com/vi/88rs18L3dBU/maxresdefault.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='aaliyah_b'),@loc,@cat,'Cash','Jenga Giant Premium Hardwood Game',35.00,"Giant Jenga, hardwood blocks. Great for parties, BBQs, or game nights. Blocks are solid, no splinters. Storage bag included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn2.bigcommerce.com/server1800/b23d9/products/70/images/366/JS4_Studio_Nov21_1__47421.1646335859.1280.1280.jpg?c=2');
 
 -- ── ART & COLLECTIBLES ───────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Art & Collectibles');
@@ -483,25 +449,25 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='carlos_m'),@loc,@cat,'Cash','Funko Pop Marvel Collection – 12 Figures',55.00,"12 Marvel Funko Pops including Iron Man, Spider-Man, Thor, Black Panther, and more. All in boxes. Great collection starter.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1566577739112-5180d4bf9390?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.redd.it/ku7lrgd4c3911.jpg');
 
 -- ── BABY & KIDS ──────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Baby & Kids');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='isabella_r'),@loc,@cat,'Cash','UPPAbaby Vista V2 Stroller – Greyson Gray',420.00,"UPPAbaby Vista V2 with main seat, bassinet, and toddler seat. Cleaned thoroughly. No tears in fabric, frame rolls perfectly. Retail $1,000+.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1590736704728-f4730bb30770?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.peppyparents.com/cdn/shop/products/VISTA20_JKE_Set.jpg?v=1618576526');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='mia_flores'),@loc,@cat,'Cash','IKEA SUNDVIK Convertible Crib – White',110.00,"IKEA Sundvik crib, converts to toddler bed. All hardware included. No recalls. Light scuffs on one rail. Mattress not included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1515488042361-ee00e0ddd4e4?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn.shopify.com/s/files/1/1540/2631/products/811U8du8ysL._AC_SL1500.jpg?v=1621821724');
 
 -- ── BEAUTY & PERSONAL CARE ───────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Beauty & Personal Care');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='jade_p'),@loc,@cat,'Cash','Dyson Airwrap Multi-Styler – Complete Long Set',310.00,"Dyson Airwrap Complete with all 6 attachments for long hair. Works perfectly, upgraded to newer version. Minor wear on barrel ends. Retail $600.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i5.walmartimages.com/asr/d897c4cc-38c4-4251-ba0e-105bc31d3ce6.2fa7904af0a610a595985a3860ec1be8.jpeg?odnHeight=768&odnWidth=768&odnBg=FFFFFF');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='valentina_c'),@loc,@cat,'Cash','Urban Decay Naked3 Eyeshadow Palette',22.00,"Urban Decay Naked3, 12 rose-hued shades. Lightly used, no cracked shadows. Pans mostly full. Mirror intact.",'Good','Available');
@@ -509,44 +475,44 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='destiny_m'),@loc,@cat,'Cash','Charlotte Tilbury Pillow Talk Lip Bundle',45.00,"Charlotte Tilbury Pillow Talk lip liner, lipstick, and lip gloss bundle. All used twice. The lip liner is barely touched. Iconic shade, great gift.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1586495777744-4e6232bf4fba?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.ctfassets.net/wlke2cbybljx/2TBb6JBnoNfxIAAl67y2Pu/51dcc878e4abd02166455e67d118b0db/Mini-Pillow-Talk-Set---Creative-Still.jpg?w=660&h=660&fit=fill&q=80&fm=jpg');
 
 -- ── HEALTH & WELLNESS ────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Health & Wellness');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='zoe_b'),@loc,@cat,'Cash','Vitamix E310 Explorian Blender – Black',165.00,"Vitamix E310 64-oz blender. Makes the smoothest smoothies and soups. Container and blade clean. Comes with tamper. Retail $350.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1570222094114-d054a817e56b?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://cdn.shouldit.com/reviews/images/blenders/cmittmbg5000cm6880z7y0n2d.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='ethan_s'),@loc,@cat,'Cash','Theragun Prime Percussive Therapy Device',135.00,"Theragun Prime massage gun. 5 speeds, Bluetooth app. Battery lasts 120+ minutes per charge. 4 attachments and charger included. Some grip wear.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://www.therabody.com/cdn/shop/files/Theragun_prime_plus-4.png');
 
 -- ── AUTOMOTIVE ───────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Automotive');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='malik_j'),@loc,@cat,'Cash','WeatherTech FloorLiners – Toyota Camry 2018-2022',48.00,"WeatherTech all-weather floor liners, front and rear, for Toyota Camry 2018-2022. Laser fit, used 2 years, washed and looking great.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://p1api.covercraft.com/medias/sys_master/images/hdb/h3a/9072735518750/615Wx615H_weathertech-floor-liners_zwt-fl_black_main1/615Wx615H-weathertech-floor-liners-zwt-fl-black-main1.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='chris_ab'),@loc,@cat,'Cash','NOCO Boost Plus GB40 1000A Jump Starter',58.00,"NOCO Boost Plus GB40 jump starter. Works on gas up to 6L and diesel up to 3L. Charges phones, built-in flashlight. Used twice.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1486262715619-67b85e0b08d3?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://invertersrus.com/wp-content/uploads/2024/02/NOCO-Boost-Plus-GB40-front.png');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tre_w'),@loc,@cat,'Cash','Husky 3-Drawer Mechanics Tool Set – 270 Pieces',115.00,"Husky 270-piece mechanic tool set. SAE and metric sockets, ratchets, wrenches, bits. All in rolling case. No missing pieces. Great for home or garage.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1530124566582-a618bc2615dc?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ebayimg.com/00/s/Nzk4WDE2MDA=/z/jK0AAOSw7VZkP0QW/$_57.JPG?set_id=880000500F');
 
 -- ── PET SUPPLIES ─────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Pet Supplies');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='hannah_l'),@loc,@cat,'Cash','Frisco Orthopedic Dog Bed – Large (40x30")',48.00,"Frisco memory foam orthopedic dog bed, large, 40x30 inches. Removable washable cover. Clean, foam still supportive. No odor.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://image.chewy.com/catalog/general/images/moe/068c3f9f-fe0c-72fe-8000-ecbcc7a636b8._AC_SX500_SY400_QL75_V1_.jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='oscar_t'),@loc,@cat,'Cash','PetFusion Ultimate Cat Tree – 33" Tall',68.00,"PetFusion cat tree 33 inches. Solid base, multiple perches. Sisal scratching posts intact. Light fur on surfaces. My cat ignored it.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1574158622682-e40e69881006?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://d2edvletk84qg.cloudfront.net/138481/138481_Image454.jpg');
 
 -- ── HOME DECOR ───────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Home Decor');
@@ -568,7 +534,7 @@ SET @cat = (SELECT category_id FROM category WHERE category_name = 'Office Equip
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='noah_c'),@loc,@cat,'Cash','LG 27" 4K UHD IPS Monitor (27UK850-W)',195.00,"LG 27UK850 4K UHD IPS monitor. USB-C charges laptop at 60W. HDR10. Hairline scratch in corner, not visible during use. Stand included.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://media.us.lg.com/transform/ecomm-PDPGallery-1100x730/269a7802-7f39-451f-a1a9-f7d0bc42c7c2/md05913416-27UK850-Z3-jpg');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='brandon_k'),@loc,@cat,'Cash','HP LaserJet Pro M15w Wireless Printer',65.00,"HP LaserJet Pro M15w compact wireless laser printer. Works with WiFi and HP Smart app. Replaced with color printer. Nearly full toner.",'Good','Available');
@@ -576,7 +542,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='malik_j'),@loc,@cat,'Cash','Logitech MX Master 3S Mouse + MX Keys Combo',95.00,"Logitech MX Master 3S mouse and MX Keys full-size keyboard combo. Both work flawlessly, charge via USB-C. Minor wear on space bar. Great for productivity.",'Good','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://i.ytimg.com/vi/w2ESYXCcfyI/hq720.jpg?sqp=-oaymwEhCK4FEIIDSFryq4qpAxMIARUAAAAAGAElAADIQj0AgKJD&rs=AOn4CLA75vQTetEGEYW8lQ6DjXodAf1WVg');
 
 -- ── OTHER ────────────────────────────────
 SET @cat = (SELECT category_id FROM category WHERE category_name = 'Other');
@@ -587,7 +553,7 @@ INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_I
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='tester1'),@loc,@cat,'Cash','YETI Rambler 30oz Tumbler – Navy',28.00,"YETI Rambler 30oz in navy. MagSlider lid included. Keeps coffee hot for hours. No dents, no rust. Lightly used.",'Like New','Available');
-INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://images.unsplash.com/photo-1590439471364-192aa70c0b53?w=800');
+INSERT INTO listing_image (listing_id,file_name,file_path) VALUES (LAST_INSERT_ID(),'listing-image','https://yeti-webmedia.imgix.net/asset/f62866db-fd1e-4701-a097-cace65ed1cd6/W/230030_site_studio_PDP-Info-CORE-Tumblers-30_2400x2400.png?bg=0fff&auto=format,compress&w=846&h=846');
 
 INSERT INTO listing (client_id,location_id,category_id,payment_type,item_name,price,description,item_condition,status) VALUES
 ((SELECT account_id FROM account WHERE username='alex_dm'),@loc,@cat,'Cash','Polaroid Now+ Instant Camera – Black',88.00,"Polaroid Now+ analog instant camera in black. Bluetooth app for creative filters. Comes with 2 packs of Polaroid film (16 shots). Barely used.",'Like New','Available');

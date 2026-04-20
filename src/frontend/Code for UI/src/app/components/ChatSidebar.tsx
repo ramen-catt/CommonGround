@@ -223,9 +223,9 @@ export function ChatSidebar() {
               </div>
             ) : (
               /* Chat View */
-              <>
+              <div className="flex flex-col flex-1 min-h-0">
                 {/* Chat Header */}
-                <div className="p-4 border-b border-gray-200">
+                <div className="p-4 border-b border-gray-200 flex-shrink-0">
                   <button
                     onClick={() => setSelectedConversation(null)}
                     className="text-red-600 hover:text-red-700 text-sm mb-2"
@@ -248,7 +248,7 @@ export function ChatSidebar() {
                 </div>
 
                 {/* Messages */}
-                <ScrollArea className="flex-1 p-4">
+                <div className="flex-1 overflow-y-auto p-4 min-h-0">
                   <div className="space-y-3">
                     {selectedConv?.messages.map((message) => {
                       const isMyMessage = message.senderEmail === user?.email;
@@ -282,11 +282,11 @@ export function ChatSidebar() {
                     })}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
 
                 {/* Transaction Button */}
                 {selectedConv?.listingId && selectedConv?.sellerId && String(selectedConv.sellerId) !== user?.id && (
-                  <div className="p-4 border-t border-gray-200">
+                  <div className="p-4 border-t border-gray-200 flex-shrink-0">
                     <Button
                       onClick={() => navigate('/transaction', {
                         state: {
@@ -307,7 +307,7 @@ export function ChatSidebar() {
                 )}
 
                 {/* Message Input */}
-                <div className="p-4 border-t border-gray-200">
+                <div className="p-4 border-t border-gray-200 flex-shrink-0">
                   <div className="flex space-x-2">
                     <Input
                       value={newMessage}
@@ -325,7 +325,7 @@ export function ChatSidebar() {
                     </Button>
                   </div>
                 </div>
-              </>
+              </div>
             )}
         </div>
       )}

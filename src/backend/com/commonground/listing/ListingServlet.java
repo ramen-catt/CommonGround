@@ -7,21 +7,13 @@ import jakarta.servlet.*;
 import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.*;
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Base64;
 import java.util.List;
-import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 @WebServlet({"/api/listings", "/api/listings/options"})
 public class ListingServlet extends HttpServlet {
 
     private static final String DEFAULT_IMAGE_URL =
             "https://images.unsplash.com/photo-1612015900986-4c4d017d1648?w=800";
-    private static final Pattern DATA_URL_PATTERN =
-            Pattern.compile("^data:(image/(png|jpeg|jpg|gif|webp));base64,(.+)$");
 
     private final ListingService service = new ListingService();
     private final Gson gson = new Gson();
@@ -241,40 +233,15 @@ public class ListingServlet extends HttpServlet {
         return images;
     }
 
-    private String saveImageReference(String imageValue) throws IOException {
+    // Stores the image reference in the DB.
+    // Accepts either an external URL or a base64 data URL — both go straight
+    // into the file_path column (MEDIUMTEXT) so nothing is written to disk.
+    // Railway's filesystem is ephemeral and would lose uploaded files on every redeploy.
+    private String saveImageReference(String imageValue) {
         if (imageValue == null || imageValue.isBlank()) {
             return "";
         }
-
-        String trimmed = imageValue.trim();
-        if (!trimmed.startsWith("data:image/")) {
-            return trimmed;
-        }
-
-        Matcher matcher = DATA_URL_PATTERN.matcher(trimmed);
-        if (!matcher.matches()) {
-            throw new IOException("Invalid image data.");
-        }
-
-        String extension = matcher.group(2).equals("jpeg") ? "jpg" : matcher.group(2);
-        byte[] imageBytes = Base64.getDecoder().decode(matcher.group(3));
-
-        Path uploadDir = getUploadDirectory();
-        Files.createDirectories(uploadDir);
-
-        String fileName = UUID.randomUUID() + "." + extension;
-        Path outputPath = uploadDir.resolve(fileName);
-        Files.write(outputPath, imageBytes);
-
-        return "/uploads/listings/" + fileName;
-    }
-
-    private Path getUploadDirectory() {
-        String catalinaBase = System.getProperty("catalina.base");
-        if (catalinaBase != null && !catalinaBase.isBlank()) {
-            return Path.of(catalinaBase, "common-ground-uploads", "listings");
-        }
-        return Path.of(System.getProperty("java.io.tmpdir"), "common-ground-uploads", "listings");
+        return imageValue.trim();
     }
 
     private JsonObject getListingOptions() {

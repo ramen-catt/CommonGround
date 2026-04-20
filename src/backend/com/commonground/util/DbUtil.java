@@ -6,6 +6,14 @@ import java.sql.SQLException;
 
 public class DbUtil {
 
+    static {
+        try {
+            Class.forName("com.mysql.cj.jdbc.Driver");
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException("MySQL JDBC driver not found", e);
+        }
+    }
+
     private static final String DB_URL  = buildUrl();
     private static final String DB_USER = System.getenv().getOrDefault("MYSQLUSER",     "cguser");
     private static final String DB_PASS = System.getenv().getOrDefault("MYSQLPASSWORD", "cgpass123");

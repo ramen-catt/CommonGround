@@ -14,11 +14,17 @@ address VARCHAR(255),
 email VARCHAR(100) NOT NULL UNIQUE,
 is_admin BOOLEAN DEFAULT FALSE,
 is_suspended BOOLEAN DEFAULT FALSE,
+is_deleted BOOLEAN DEFAULT FALSE,
 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Add created_at to existing installs that ran before this column was added
-ALTER TABLE account ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+CREATE TABLE IF NOT EXISTS deleted_account (
+deleted_account_id INT auto_increment PRIMARY KEY,
+email VARCHAR(100) NOT NULL UNIQUE,
+username VARCHAR(50) NOT NULL UNIQUE,
+deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 
 CREATE TABLE IF NOT EXISTS client (
     account_id INT PRIMARY KEY,

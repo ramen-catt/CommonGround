@@ -6,5 +6,4 @@ out/
 *.log
 .env
 repo/
-index.html
 *.war

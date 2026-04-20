@@ -19,6 +19,8 @@ public class AuthServlet extends HttpServlet {
     @Override
     public void init() {
         try {
+            ensureAccountDeletionColumn();
+            ensureDeletedAccountTable();
             ensureDemoAccount("tester1", "tester1@gmail.com", "tester1", false, true, true);
             ensureDemoAccount("tester2", "tester2@gmail.com", "tester2", false, true, true);
             ensureDemoAccount("adriana_admin", "adriana_admin@commonground.com", "admin", true, false, false);
@@ -47,6 +49,19 @@ public class AuthServlet extends HttpServlet {
         if (session == null || session.getAttribute("accountId") == null) {
             res.setStatus(401);
             out.print("{\"error\":\"Not logged in\"}");
+            return;
+        }
+
+        try {
+            if (isDeletedAccountId((int) session.getAttribute("accountId"))) {
+                session.invalidate();
+                res.setStatus(401);
+                out.print("{\"error\":\"This account has been deleted\"}");
+                return;
+            }
+        } catch (SQLException e) {
+            res.setStatus(500);
+            out.print("{\"error\":\"" + e.getMessage() + "\"}");
             return;
         }
 
@@ -94,8 +109,16 @@ public class AuthServlet extends HttpServlet {
         String hashed   = sha256(password);
         String usernameGuess = email.contains("@") ? email.substring(0, email.indexOf('@')) : email;
 
+        if (isDeletedAccount(email, usernameGuess)) {
+            res.setStatus(403);
+            out.print("{\"error\":\"This account has been deleted\"}");
+            return;
+        }
+
+        ensureAccountDeletionColumn();
+
         String sql = "SELECT a.account_id, a.username, a.email, a.address, a.password_hash, " +
-                     "a.is_admin, a.is_suspended, " +
+                     "a.is_admin, a.is_suspended, a.is_deleted, " +
                      "COALESCE(c.can_list, TRUE) AS can_list, COALESCE(c.can_purchase, TRUE) AS can_purchase " +
                      "FROM account a LEFT JOIN client c ON a.account_id = c.account_id " +
                      "WHERE a.email = ? OR a.username = ?";
@@ -123,6 +146,12 @@ public class AuthServlet extends HttpServlet {
                     out.print("{\"error\":\"Wrong email or password\"}");
                     return;
                 }
+            }
+
+            if (rs.getBoolean("is_deleted")) {
+                res.setStatus(403);
+                out.print("{\"error\":\"This account has been deleted\"}");
+                return;
             }
 
             String storedHash = rs.getString("password_hash");
@@ -183,6 +212,14 @@ public class AuthServlet extends HttpServlet {
         String phone    = body.has("phoneNumber") ? body.get("phoneNumber").getAsString() : "";
         String address  = body.has("address")     ? body.get("address").getAsString()     : "";
         String hashed   = sha256(password);
+
+        ensureAccountDeletionColumn();
+
+        if (isDeletedAccount(email, username)) {
+            res.setStatus(409);
+            out.print("{\"error\":\"That account was deleted and cannot be used again\"}");
+            return;
+        }
 
         String checkSql = "SELECT account_id FROM account WHERE email = ?";
         try (Connection conn = getConnection();
@@ -280,16 +317,22 @@ public class AuthServlet extends HttpServlet {
 
     private void ensureDemoAccount(String username, String email, String password,
                                    boolean isAdmin, boolean canList, boolean canPurchase) throws SQLException {
+        ensureAccountDeletionColumn();
+        if (isDeletedAccount(email, username)) {
+            return;
+        }
+
         String hashed = sha256(password);
         Integer accountId = null;
 
         try (Connection conn = getConnection();
              PreparedStatement find = conn.prepareStatement(
-                     "SELECT account_id FROM account WHERE username = ? OR email = ? LIMIT 1")) {
+                     "SELECT account_id, is_deleted FROM account WHERE username = ? OR email = ? LIMIT 1")) {
             find.setString(1, username);
             find.setString(2, email);
             ResultSet rs = find.executeQuery();
             if (rs.next()) {
+                if (rs.getBoolean("is_deleted")) return;
                 accountId = rs.getInt("account_id");
             }
         }
@@ -297,8 +340,8 @@ public class AuthServlet extends HttpServlet {
         if (accountId == null) {
             try (Connection conn = getConnection();
                  PreparedStatement insert = conn.prepareStatement(
-                         "INSERT INTO account (username, password_hash, phone_number, address, email, is_admin, is_suspended) " +
-                         "VALUES (?, ?, ?, ?, ?, ?, FALSE)",
+                         "INSERT INTO account (username, password_hash, phone_number, address, email, is_admin, is_suspended, is_deleted) " +
+                         "VALUES (?, ?, ?, ?, ?, ?, FALSE, FALSE)",
                          Statement.RETURN_GENERATED_KEYS)) {
                 insert.setString(1, username);
                 insert.setString(2, hashed);
@@ -314,7 +357,7 @@ public class AuthServlet extends HttpServlet {
         } else {
             try (Connection conn = getConnection();
                  PreparedStatement update = conn.prepareStatement(
-                         "UPDATE account SET email = ?, password_hash = ?, is_admin = ?, is_suspended = FALSE WHERE account_id = ?")) {
+                         "UPDATE account SET email = ?, password_hash = ?, is_admin = ?, is_suspended = FALSE, is_deleted = FALSE WHERE account_id = ?")) {
                 update.setString(1, email);
                 update.setString(2, hashed);
                 update.setBoolean(3, isAdmin);
@@ -333,6 +376,65 @@ public class AuthServlet extends HttpServlet {
                 client.setBoolean(3, canPurchase);
                 client.executeUpdate();
             }
+        }
+    }
+
+    private void ensureDeletedAccountTable() throws SQLException {
+        String sql = "CREATE TABLE IF NOT EXISTS deleted_account (" +
+                     "deleted_account_id INT AUTO_INCREMENT PRIMARY KEY, " +
+                     "email VARCHAR(100) NOT NULL UNIQUE, " +
+                     "username VARCHAR(50) NOT NULL UNIQUE, " +
+                     "deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP" +
+                     ")";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.executeUpdate();
+        }
+    }
+
+    private boolean isDeletedAccount(String email, String username) throws SQLException {
+        ensureAccountDeletionColumn();
+        ensureDeletedAccountTable();
+        String sql = "SELECT deleted_account_id AS id FROM deleted_account " +
+                     "WHERE LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?) " +
+                     "UNION " +
+                     "SELECT account_id AS id FROM account " +
+                     "WHERE is_deleted = TRUE AND (LOWER(email) = LOWER(?) OR LOWER(username) = LOWER(?)) " +
+                     "LIMIT 1";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setString(1, email != null ? email.trim() : "");
+            stmt.setString(2, username != null ? username.trim() : "");
+            stmt.setString(3, email != null ? email.trim() : "");
+            stmt.setString(4, username != null ? username.trim() : "");
+            return stmt.executeQuery().next();
+        }
+    }
+
+    private boolean isDeletedAccountId(int accountId) throws SQLException {
+        ensureAccountDeletionColumn();
+        String sql = "SELECT is_deleted FROM account WHERE account_id = ?";
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, accountId);
+            ResultSet rs = stmt.executeQuery();
+            return rs.next() && rs.getBoolean("is_deleted");
+        }
+    }
+
+    private void ensureAccountDeletionColumn() throws SQLException {
+        if (hasColumn("account", "is_deleted")) return;
+        try (Connection conn = getConnection();
+             PreparedStatement stmt = conn.prepareStatement(
+                     "ALTER TABLE account ADD COLUMN is_deleted BOOLEAN DEFAULT FALSE")) {
+            stmt.executeUpdate();
+        }
+    }
+
+    private boolean hasColumn(String tableName, String columnName) throws SQLException {
+        try (Connection conn = getConnection();
+             ResultSet columns = conn.getMetaData().getColumns(null, null, tableName, columnName)) {
+            return columns.next();
         }
     }
 

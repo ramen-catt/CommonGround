@@ -28,6 +28,7 @@ export function TransactionConfirmPage() {
   const { transactionId } = transactionState;
   
   const [transaction, setTransaction] = useState<any>(null);
+  const [txLoading, setTxLoading] = useState(true);
   const [hasConfirmed, setHasConfirmed] = useState(false);
   const [showReviewForm, setShowReviewForm] = useState(false);
   const [rating, setRating] = useState(0);
@@ -56,6 +57,8 @@ export function TransactionConfirmPage() {
       setHasConfirmed(isSeller ? found.sellerConfirmed : found.buyerConfirmed);
     } catch {
       setTransaction(null);
+    } finally {
+      setTxLoading(false);
     }
   };
 
@@ -135,6 +138,14 @@ export function TransactionConfirmPage() {
       toast.error(err.message || 'Could not submit review');
     }
   };
+
+  if (txLoading) {
+    return (
+      <div className="min-h-screen bg-red-50 flex items-center justify-center">
+        <p className="text-gray-500">Confirming transaction...</p>
+      </div>
+    );
+  }
 
   if (!transaction) {
     return (
@@ -317,7 +328,7 @@ export function TransactionConfirmPage() {
               {bothConfirmed && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
                   <p className="text-sm text-green-900">
-                    <strong>Success!</strong> Both parties have confirmed the transaction. You can now leave a review for the seller.
+                    <strong>Success!</strong> Both parties have confirmed the transaction. You can now leave a review for each other.
                   </p>
                 </div>
               )}
@@ -415,7 +426,7 @@ export function TransactionConfirmPage() {
                   <Label htmlFor="reviewComment">Your Review</Label>
                   <Textarea
                     id="reviewComment"
-                    placeholder="Share your experience with this seller..."
+                    placeholder="Share your experience with this person..."
                     rows={5}
                     value={reviewComment}
                     onChange={(e) => setReviewComment(e.target.value)}
